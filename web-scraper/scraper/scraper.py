@@ -2,11 +2,12 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import requests
 from bs4 import BeautifulSoup
 from models.volume import Volume
 from models.paper import Paper
-import fitz
+from pypdf import PdfReader
 
 
 class Scraper:
@@ -80,8 +81,8 @@ class Scraper:
 
             url = self.base_url + volume_id + "/" + li.a.get("href")
             pages = li.find("span", class_="CEURPAGES").string
-            # abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
             abstract, keywords = "TODO", []
+            abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
             paper = Paper(
                 url=url,
                 title=title_element.string,
@@ -96,34 +97,64 @@ class Scraper:
         return papers
 
     def __extract_data_from_pdf(self, url, volume_id, num):
+        # get and save the pdf
         response = requests.get(url)
         pdf_path = Path("../data/tmp")
         pdf_path.mkdir(parents=True, exist_ok=True)
         pdf_name = f"{volume_id}-{num}.pdf"
         pdf_filepath = pdf_path / pdf_name
-        logging.info(f"Saving pdf {volume_id}-{num} in {pdf_filepath.resolve()}")
         with open(pdf_filepath, "wb") as f:
             f.write(response.content)
 
-        doc = fitz.open(pdf_filepath)
-        logging.info(f"Extracting pdf {volume_id}-{num}")
-
-        # Loop through pages to extract text
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            text = page.get_text()
-
-            abstract = ""
-            keywords = []
-            # Search for "Abstract"
-            if "Abstract" in text:
-                abstract_start = text.find("Abstract")
-                abstract_end = text.find("\n", abstract_start)
-                abstract = text[abstract_start:abstract_end].strip()
-
-            # Search for "Keywords"
-            if "Keywords" in text:
-                keywords_start = text.find("Keywords")
-                keywords_end = text.find("\n", keywords_start)
-                keywords = text[keywords_start:keywords_end].strip()
+        # extract abstract and keywords from pdf
+        reader = PdfReader(pdf_filepath)
+        page = reader.pages[0]
+        text = page.extract_text()
+        abstract = extract_abstract(text)
+        keywords = extract_keywords(text)
+        # delete the saved pdf file
+        os.remove(pdf_filepath)
         return abstract, keywords
+
+
+def extract_abstract(text):
+    lines = text.splitlines()
+    start_found = False
+    extracted_lines = []
+
+    for line in lines:
+        if "abstract" in line.lower():
+            start_found = True
+        elif "keywords" in line.lower() and start_found:
+            break
+        elif start_found:
+            extracted_lines.append(line.strip())
+
+    # Join the extracted lines into a single string
+    return " ".join(extracted_lines)
+
+
+def extract_keywords(text):
+    def clear_keyword(keyword):
+        keyword = "".join(char for char in keyword if not char.isdigit())
+        if keyword[0].isspace():
+            keyword = keyword[1:]
+        return keyword
+
+    lines = text.splitlines()
+    start_found = False
+    extracted_lines = []
+
+    for line in lines:
+        if "keywords" in line.lower():
+            start_found = True
+        elif ("." in line or "introduction" in line.lower()) and start_found:
+            break
+        elif start_found:
+            extracted_lines.append(line.strip())
+
+    # Join the extracted lines into a single string
+    string = "".join(extracted_lines)
+    return [
+        clear_keyword(keyword) for keyword in re.split(r"[;,]", string) if keyword != ""
+    ]

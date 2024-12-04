@@ -26,7 +26,6 @@ def scrape_volume(volume_id: int, scraper: Scraper):
     os.makedirs(volume_path, exist_ok=True)
     json_volume_path = volume_path / f"{volume_metadata.volnr}.json"
 
-    logging.info(f"Saving {volume_id} json in {json_volume_path.resolve()}")
     # Save json file
     with open(json_volume_path, "w") as file:
         json.dump(volume_metadata.to_dict(), file, indent=4)
