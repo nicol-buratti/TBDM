@@ -36,9 +36,7 @@ def main():
         # Submit each volume scraping task to executor
         futures = []
         for volume_id in all_volumes:
-            futures.append(
-                executor.submit(scrape_volume, volume_id, scraper, volume_path)
-            )
+            futures.append(executor.submit(scrape_volume, volume_id, scraper))
 
         # Wait for all tasks to complete
         for future in futures:
