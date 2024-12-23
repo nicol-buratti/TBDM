@@ -12,6 +12,7 @@ from pypdf import PdfReader
 from models.paper import Keyword, Paper
 from models.people import Person
 from models.volume import Volume
+from neomodel import db
 
 
 class Scraper:
@@ -108,16 +109,10 @@ class Scraper:
                 )
                 abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
 
-                # TODO this method to get authors raise depth exception
-                # authors_list = soup.select("span.CEURAUTHOR")
-                # authors = get_or_create_authors(authors_list)
+                # Create authors and keywords
+                authors_list = soup.select("span.CEURAUTHOR")
+                authors = get_or_create_authors(authors_list)
                 keywords = get_or_create_keywords(keywords)
-                # Extract authors and keywords
-                authors = [
-                    Person(name=author.string).save()
-                    for author in li.select("span.CEURAUTHOR")
-                ]
-                # keywords = [Keyword(name=keyword).save() for keyword in keywords]
 
                 # Create Paper object
                 paper = Paper(
@@ -161,48 +156,54 @@ class Scraper:
 
 
 def get_or_create_voleditors(editors_list):
-    voleditor = []
-    for editor in editors_list:
-        if editor.string:
-            # Check if the person already exists
-            existing_person = Person.nodes.first_or_none(name=editor.string)
-            if existing_person:
-                voleditor.append(existing_person)  # Add existing person to the list
-            else:
-                # Create and save the new person
-                new_person = Person(name=editor.string)
-                new_person.save()  # Save after creating the new node
-                voleditor.append(new_person)
-    return voleditor
+    query = """
+    UNWIND $names AS name
+    MERGE (p:Person {name: name})
+    RETURN p
+    """
+
+    # Parameters
+    params = {"names": editors_list}
+
+    # Execute the query
+    results, _ = db.cypher_query(query, params)
+    editors = [Person.inflate(row[0]) for row in results]
+
+    return editors
 
 
 def get_or_create_authors(authors_list):
-    authors = []
-    for author in authors_list:
-        if not author.string:
-            continue
-        # Check if the author already exists
-        existing_author = Person.nodes.first_or_none(name=author.string)
-        if existing_author:
-            authors.append(existing_author)  # Add existing author to the list
-        else:
-            # Create and save the new author
-            new_author = Person(name=author.string).save()
-            authors.append(new_author)
+    authors_list = [name.string for name in authors_list]
+    query = """
+    UNWIND $names AS name
+    MERGE (p:Person {name: name})
+    RETURN p
+    """
+
+    # Parameters
+    params = {"names": authors_list}
+
+    # Execute the query
+    results, _ = db.cypher_query(query, params)
+    authors = [Person.inflate(row[0]) for row in results]
+
     return authors
 
 
-def get_or_create_keywords(keywords_list):
-    keywords = []
-    for keyword in keywords_list:
-        # Check if the keyword already exists
-        existing_keyword = Keyword.nodes.first_or_none(name=keyword)
-        if existing_keyword:
-            keywords.append(existing_keyword)  # Add existing keyword to the list
-        else:
-            # Create and save the new keyword
-            new_keyword = Keyword(name=keyword).save()
-            keywords.append(new_keyword)
+def get_or_create_keywords(keywords):
+    query = """
+    UNWIND $names AS name
+    MERGE (p:Keyword {name: name})
+    RETURN p
+    """
+
+    # Parameters
+    params = {"names": keywords}
+
+    # Execute the query
+    results, _ = db.cypher_query(query, params)
+    keywords = [Keyword.inflate(row[0]) for row in results]
+
     return keywords
 
 

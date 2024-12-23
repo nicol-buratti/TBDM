@@ -6,6 +6,7 @@ from pathlib import Path
 from neomodel import config
 
 from scraper.scraper import Scraper
+from neomodel import db
 
 logging.basicConfig(
     filename="scraping.log",
@@ -44,4 +45,9 @@ def main():
 
 
 if __name__ == "__main__":
+    db.cypher_query(
+        """MATCH (n)
+    DETACH DELETE n
+    """
+    )
     main()
