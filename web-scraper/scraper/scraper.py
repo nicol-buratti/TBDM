@@ -41,12 +41,9 @@ class Scraper:
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
-            # Extract editor details
-            voleditor = [
-                Person(name=editor.string).save()
-                for editor in soup.find_all("span", class_="CEURVOLEDITOR")
-                if editor.string
-            ]
+            # Generate the list of editors
+            editors_list = soup.find_all("span", class_="CEURVOLEDITOR")
+            voleditor = get_or_create_voleditors(editors_list)
 
             # Fetch volume papers
             papers = self.get_volume_papers(volume_id)
@@ -77,14 +74,13 @@ class Scraper:
 
         except Exception as e:
             logging.error(
-                f"An unexpected error occurred while processing volume {volume_id}: {e}"
+                f"An unexpected error occurred while processing volume {volume_id}: {e.with_traceback()}"
             )
             return None
 
     def get_volume_metadata_first_900(self, volume_id):
         pass
 
-    # TODO actually every entity is saved even if a person already exists
     def get_volume_papers(self, volume_id) -> List[Paper]:
         logging.info(f"Getting all papers for {volume_id}")
 
@@ -98,7 +94,7 @@ class Scraper:
             for num, li in enumerate(soup.select("div.CEURTOC li")):
                 title_element = li.select_one("span.CEURTITLE")
                 if not (
-                        li.a and title_element and title_element.string
+                    li.a and title_element and title_element.string
                 ):  # Skip non-paper content
                     logging.info(f"Volume {volume_id} contains non-paper content")
                     continue
@@ -112,12 +108,16 @@ class Scraper:
                 )
                 abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
 
+                # TODO this method to get authors raise depth exception
+                # authors_list = soup.select("span.CEURAUTHOR")
+                # authors = get_or_create_authors(authors_list)
+                keywords = get_or_create_keywords(keywords)
                 # Extract authors and keywords
                 authors = [
                     Person(name=author.string).save()
                     for author in li.select("span.CEURAUTHOR")
                 ]
-                keywords = [Keyword(name=keyword).save() for keyword in keywords]
+                # keywords = [Keyword(name=keyword).save() for keyword in keywords]
 
                 # Create Paper object
                 paper = Paper(
@@ -158,6 +158,52 @@ class Scraper:
         # delete the saved pdf file
         os.remove(pdf_filepath)
         return abstract, keywords
+
+
+def get_or_create_voleditors(editors_list):
+    voleditor = []
+    for editor in editors_list:
+        if editor.string:
+            # Check if the person already exists
+            existing_person = Person.nodes.first_or_none(name=editor.string)
+            if existing_person:
+                voleditor.append(existing_person)  # Add existing person to the list
+            else:
+                # Create and save the new person
+                new_person = Person(name=editor.string)
+                new_person.save()  # Save after creating the new node
+                voleditor.append(new_person)
+    return voleditor
+
+
+def get_or_create_authors(authors_list):
+    authors = []
+    for author in authors_list:
+        if not author.string:
+            continue
+        # Check if the author already exists
+        existing_author = Person.nodes.first_or_none(name=author.string)
+        if existing_author:
+            authors.append(existing_author)  # Add existing author to the list
+        else:
+            # Create and save the new author
+            new_author = Person(name=author.string).save()
+            authors.append(new_author)
+    return authors
+
+
+def get_or_create_keywords(keywords_list):
+    keywords = []
+    for keyword in keywords_list:
+        # Check if the keyword already exists
+        existing_keyword = Keyword.nodes.first_or_none(name=keyword)
+        if existing_keyword:
+            keywords.append(existing_keyword)  # Add existing keyword to the list
+        else:
+            # Create and save the new keyword
+            new_keyword = Keyword(name=keyword).save()
+            keywords.append(new_keyword)
+    return keywords
 
 
 def extract_abstract(text):
