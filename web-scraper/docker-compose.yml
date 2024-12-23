@@ -1,0 +1,25 @@
+services:
+
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - .:/usr/src/app
+  #   ports:
+  #     - "8000:8000" # Map port 8000 of the container to port 8000 on the host (adjust as needed)
+  #   command: [ "python", "./main.py" ] # Override CMD if necessary
+
+  neo4j:
+    image: neo4j:4.4-community
+    volumes:
+      - /$HOME/neo4j/logs:/logs
+      - /$HOME/neo4j/config:/config
+      - /$HOME/neo4j/data:/data
+      - /$HOME/neo4j/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    restart: always
