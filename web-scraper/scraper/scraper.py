@@ -1,23 +1,21 @@
 import json
 import logging
 import os
-from pathlib import Path
 import re
+from pathlib import Path
+from typing import List
+
 import requests
 from bs4 import BeautifulSoup
-from models.volume import Volume
-from models.paper import Paper
 from pypdf import PdfReader
+
+from models.paper import Keyword, Paper
+from models.people import Person
+from models.volume import Volume
 
 
 class Scraper:
     base_url = "https://ceur-ws.org/"
-
-    logging.basicConfig(
-        filename="scraping.log",
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-    )
 
     def get_all_volumes(self):
         if os.path.exists("volumes.json"):
@@ -37,12 +35,23 @@ class Scraper:
         return vol_values
 
     def get_volume_metadata(self, volume_id) -> Volume:
-        logging.info(f"Getting metadata for {volume_id}")
+        logging.info(f"Getting metadata for volume {volume_id}")
 
         response = requests.get(self.base_url + volume_id)
         soup = BeautifulSoup(response.text, "html.parser")
 
         try:
+            # Extract editor details
+            voleditor = [
+                Person(name=editor.string).save()
+                for editor in soup.find_all("span", class_="CEURVOLEDITOR")
+                if editor.string
+            ]
+
+            # Fetch volume papers
+            papers = self.get_volume_papers(volume_id)
+
+            # Create and save volume node
             volume = Volume(
                 title=soup.title.string,
                 volnr=soup.find("span", class_="CEURVOLNR").string,
@@ -52,54 +61,88 @@ class Scraper:
                 voltitle=soup.find("span", class_="CEURVOLTITLE").string,
                 fulltitle=soup.find("span", class_="CEURFULLTITLE").string,
                 loctime=soup.find("span", class_="CEURLOCTIME").string,
-                voleditor=[
-                    editor.string
-                    for editor in soup.find_all("span", class_="CEURVOLEDITOR")
-                ],
+            )
+            volume.save()
+
+            # Connect editors and papers to volume
+            for editor in voleditor:
+                volume.voleditor.connect(editor)
+            for paper in papers:
+                volume.papers.connect(paper)
+
+            logging.info(
+                f"Volume {volume_id} metadata and relationships successfully saved."
             )
             return volume
-        except ValueError as e:
-            logging.error(f"{volume_id}, Scraping error: {e}")
+
         except Exception as e:
-            logging.error(f"{volume_id}, An unexpected error occurred: {e}")
+            logging.error(
+                f"An unexpected error occurred while processing volume {volume_id}: {e}"
+            )
+            return None
 
     def get_volume_metadata_first_900(self, volume_id):
         pass
 
-    def get_volume_papers(self, volume_id):
+    # TODO actually every entity is saved even if a person already exists
+    def get_volume_papers(self, volume_id) -> List[Paper]:
         logging.info(f"Getting all papers for {volume_id}")
+
+        # Fetch page content
         response = requests.get(self.base_url + volume_id)
         soup = BeautifulSoup(response.text, "html.parser")
+        try:
+            papers = []
 
-        papers = []
-        for num, li in enumerate(soup.find("div", class_="CEURTOC").find_all("li")):
-            title_element = li.find("span", class_="CEURTITLE")
-            is_paper = li.a and title_element and title_element.string
-            if not is_paper:
-                logging.info(f"Volume {volume_id} contains non-paper content")
-                continue
+            # Find all list items within the div with class "CEURTOC"
+            for num, li in enumerate(soup.select("div.CEURTOC li")):
+                title_element = li.select_one("span.CEURTITLE")
+                if not (
+                        li.a and title_element and title_element.string
+                ):  # Skip non-paper content
+                    logging.info(f"Volume {volume_id} contains non-paper content")
+                    continue
 
-            url = self.base_url + volume_id + "/" + li.a.get("href")
-            pages = li.find("span", class_="CEURPAGES").string
-            abstract, keywords = "TODO", []
-            abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
-            paper = Paper(
-                url=url,
-                title=title_element.string,
-                pages=pages if pages else None,
-                author=[
-                    author.string for author in li.find_all("span", class_="CEURAUTHOR")
-                ],
-                abstract=abstract,
-                keywords=keywords,
-            )
-            papers.append(paper)
+                # Extract paper information
+                url = self.base_url + volume_id + "/" + li.a["href"]
+                pages = (
+                    li.select_one("span.CEURPAGES").string
+                    if li.select_one("span.CEURPAGES")
+                    else None
+                )
+                abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
+
+                # Extract authors and keywords
+                authors = [
+                    Person(name=author.string).save()
+                    for author in li.select("span.CEURAUTHOR")
+                ]
+                keywords = [Keyword(name=keyword).save() for keyword in keywords]
+
+                # Create Paper object
+                paper = Paper(
+                    url=url, title=title_element.string, pages=pages, abstract=abstract
+                )
+                paper.save()
+
+                # Connect authors and keywords to the paper
+                for author in authors:
+                    paper.authors.connect(author)
+                for keyword in keywords:
+                    paper.keywords.connect(keyword)
+
+                papers.append(paper)
+        except ValueError as e:
+            logging.error(f"{volume_id} paper {num}, Scraping error: {e}")
+        except Exception as e:
+            logging.error(f"{volume_id} paper {num}, An unexpected error occurred: {e}")
+
         return papers
 
     def __extract_data_from_pdf(self, url, volume_id, num):
         # get and save the pdf
         response = requests.get(url)
-        pdf_path = Path("../data/tmp")
+        pdf_path = Path("./data/tmp")
         pdf_path.mkdir(parents=True, exist_ok=True)
         pdf_name = f"{volume_id}-{num}.pdf"
         pdf_filepath = pdf_path / pdf_name
@@ -109,7 +152,7 @@ class Scraper:
         # extract abstract and keywords from pdf
         reader = PdfReader(pdf_filepath)
         page = reader.pages[0]
-        text = page.extract_text()
+        text = page.extract_text().lower()
         abstract = extract_abstract(text)
         keywords = extract_keywords(text)
         # delete the saved pdf file
@@ -123,15 +166,17 @@ def extract_abstract(text):
     extracted_lines = []
 
     for line in lines:
-        if "abstract" in line.lower():
+        if "abstract" in line:
             start_found = True
-        elif "keywords" in line.lower() and start_found:
+        elif ("keywords" in line or "introduction" in line) and start_found:
             break
         elif start_found:
             extracted_lines.append(line.strip())
 
     # Join the extracted lines into a single string
-    return " ".join(extracted_lines)
+    abstract = " ".join(extracted_lines)
+    # Capitalize letters after ".", "!", "?"
+    return re.sub("(^|[.?!])\s*([a-zA-Z])", lambda p: p.group(0).upper(), abstract)
 
 
 def extract_keywords(text):
@@ -146,9 +191,9 @@ def extract_keywords(text):
     extracted_lines = []
 
     for line in lines:
-        if "keywords" in line.lower():
+        if "keywords" in line:
             start_found = True
-        elif ("." in line or "introduction" in line.lower()) and start_found:
+        elif ("." in line or "introduction" in line) and start_found:
             break
         elif start_found:
             extracted_lines.append(line.strip())

@@ -1,34 +1,27 @@
-import json
 import logging
-from concurrent.futures import ThreadPoolExecutor
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from scraper.scraper import Scraper
-from dotenv import load_dotenv
 
-load_dotenv()
+from neomodel import config
+
+from scraper.scraper import Scraper
+
 logging.basicConfig(
     filename="scraping.log",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
+config.DATABASE_URL = "bolt://neo4j:password@localhost:7687"
 
 
 def scrape_volume(volume_id: int, scraper: Scraper):
     volume_metadata = scraper.get_volume_metadata(volume_id)
+    # if the scraping failed
     if not volume_metadata:
         return
 
-    volume_papers = scraper.get_volume_papers(volume_id)
-    volume_metadata.papers = volume_papers
-
-    volume_path = Path("../data/Volumes")
-    os.makedirs(volume_path, exist_ok=True)
-    json_volume_path = volume_path / f"{volume_metadata.volnr}.json"
-
-    # Save json file
-    with open(json_volume_path, "w") as file:
-        json.dump(volume_metadata.to_dict(), file, indent=4)
+    return volume_metadata
 
 
 def main():
@@ -36,11 +29,16 @@ def main():
 
     all_volumes = scraper.get_all_volumes()
 
-    with ThreadPoolExecutor(max_workers=20) as executor:  # Adjust max_workers as needed
+    volume_path = Path("./data/Volumes")
+    os.makedirs(volume_path, exist_ok=True)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
         # Submit each volume scraping task to executor
         futures = []
         for volume_id in all_volumes:
-            futures.append(executor.submit(scrape_volume, volume_id, scraper))
+            futures.append(
+                executor.submit(scrape_volume, volume_id, scraper, volume_path)
+            )
 
         # Wait for all tasks to complete
         for future in futures:

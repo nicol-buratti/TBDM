@@ -1,10 +1,6 @@
 from neomodel import (
-    config,
     StructuredNode,
     StringProperty,
-    StructuredRel,
-    IntegerProperty,
-    UniqueIdProperty,
     RelationshipTo,
 )
 
@@ -13,7 +9,6 @@ from models.people import Person
 
 
 class Volume(StructuredNode):
-
     title = StringProperty()
     volnr = StringProperty()
     urn = StringProperty()

@@ -1,5 +1,7 @@
 from neomodel import StructuredNode, StringProperty, RelationshipTo
 
+from models.people import Person
+
 
 class Keyword(StructuredNode):
     name = StringProperty()
@@ -18,8 +20,8 @@ class Paper(StructuredNode):
     abstract = StringProperty()
 
     # Relationships
-    authors = RelationshipTo("Person", "AUTHOR")
-    keywords = RelationshipTo("Keyword", "KEYWORD")
+    authors = RelationshipTo(Person, "AUTHOR")
+    keywords = RelationshipTo(Keyword, "KEYWORD")
 
     def to_dict(self):
         authors = [author.to_dict() for author in self.authors]

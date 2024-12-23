@@ -1,11 +1,6 @@
 from neomodel import (
-    config,
     StructuredNode,
     StringProperty,
-    StructuredRel,
-    IntegerProperty,
-    UniqueIdProperty,
-    RelationshipTo,
 )
 
 
