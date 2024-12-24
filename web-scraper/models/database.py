@@ -4,22 +4,23 @@ from abc import abstractmethod
 from models.paper import Keyword, Paper
 from models.people import Person
 from models.volume import Volume
+from neomodel import db
 
 
 class Neo4jDatabase:
 
     @abstractmethod
     def create_volume(volume: Volume):
-        logging.info("Attempting to create a volume node with title: %s", volume.title)
+        logging.info("Attempting to create the volume node: %s", volume.volnr)
 
         try:
             # Ensure editors are created or retrieved
-            editors = [
-                Person.get_or_create(name=editor)[0] for editor in volume.voleditor
-            ]
+            editors = get_or_create_voleditors(volume.voleditor)
+            volume.voleditor = None
 
             # Ensure papers are created or retrieved
             papers = [Neo4jDatabase.create_paper(paper) for paper in volume.papers]
+            volume.papers = None
 
             # Save the volume node itself
             volume.save()
@@ -43,7 +44,6 @@ class Neo4jDatabase:
                 volume.volnr,
                 str(e),
             )
-            raise
 
     @abstractmethod
     def create_paper(paper: Paper):
@@ -51,10 +51,11 @@ class Neo4jDatabase:
 
         try:
             # Ensure authors and keywords are created or retrieved
-            authors = [Person.get_or_create(name=author)[0] for author in paper.authors]
-            keywords = [
-                Keyword.get_or_create(name=keyword)[0] for keyword in paper.keywords
-            ]
+            authors = get_or_create_authors(paper.authors)
+            paper.authors = None
+
+            keywords = get_or_create_keywords(paper.keywords)
+            paper.keywords = None
 
             # Save the paper node itself
             paper.save()
@@ -73,3 +74,54 @@ class Neo4jDatabase:
                 "Failed to create paper node with id: %s. Error: %s", paper.url, str(e)
             )
             raise
+
+
+def get_or_create_voleditors(editors_list):
+    query = """
+    UNWIND $names AS name
+    MERGE (p:Person {name: name})
+    RETURN p
+    """
+
+    # Parameters
+    params = {"names": editors_list}
+
+    # Execute the query
+    results, _ = db.cypher_query(query, params)
+    editors = [Person.inflate(row[0]) for row in results]
+
+    return editors
+
+
+def get_or_create_authors(authors_list):
+    query = """
+    UNWIND $names AS name
+    MERGE (p:Person {name: name})
+    RETURN p
+    """
+
+    # Parameters
+    params = {"names": authors_list}
+
+    # Execute the query
+    results, _ = db.cypher_query(query, params)
+    authors = [Person.inflate(row[0]) for row in results]
+
+    return authors
+
+
+def get_or_create_keywords(keywords):
+    query = """
+    UNWIND $names AS name
+    MERGE (p:Keyword {name: name})
+    RETURN p
+    """
+
+    # Parameters
+    params = {"names": keywords}
+
+    # Execute the query
+    results, _ = db.cypher_query(query, params)
+    keywords = [Keyword.inflate(row[0]) for row in results]
+
+    return keywords

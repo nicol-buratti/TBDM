@@ -24,17 +24,14 @@ class Paper(StructuredNode):
     keywords = RelationshipTo(Keyword, "KEYWORD")
 
     def to_dict(self):
-        authors = [author.to_dict() for author in self.authors]
-
-        keywords = [keyword.to_dict() for keyword in self.keywords]
 
         return {
             "url": self.url,
             "title": self.title,
             "pages": self.pages,
             "abstract": self.abstract,
-            "authors": authors,
-            "keywords": keywords,
+            "authors": self.authors,
+            "keywords": self.keywords,
         }
 
     def __str__(self):

@@ -9,10 +9,8 @@ import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
-from models.paper import Keyword, Paper
-from models.people import Person
+from models.paper import Paper
 from models.volume import Volume
-from neomodel import db
 
 
 class Scraper:
@@ -43,8 +41,9 @@ class Scraper:
 
         try:
             # Generate the list of editors
-            editors_list = soup.find_all("span", class_="CEURVOLEDITOR")
-            voleditor = get_or_create_voleditors(editors_list)
+            voleditor = [
+                name.string for name in soup.find_all("span", class_="CEURVOLEDITOR")
+            ]
 
             # Fetch volume papers
             papers = self.get_volume_papers(volume_id)
@@ -59,18 +58,10 @@ class Scraper:
                 voltitle=soup.find("span", class_="CEURVOLTITLE").string,
                 fulltitle=soup.find("span", class_="CEURFULLTITLE").string,
                 loctime=soup.find("span", class_="CEURLOCTIME").string,
+                voleditor=voleditor,
+                papers=papers,
             )
-            volume.save()
 
-            # Connect editors and papers to volume
-            for editor in voleditor:
-                volume.voleditor.connect(editor)
-            for paper in papers:
-                volume.papers.connect(paper)
-
-            logging.info(
-                f"Volume {volume_id} metadata and relationships successfully saved."
-            )
             return volume
 
         except ValueError as e:
@@ -96,7 +87,6 @@ class Scraper:
                 if not (
                     li.a and title_element and title_element.string
                 ):  # Skip non-paper content
-                    logging.info(f"Volume {volume_id} contains non-paper content")
                     continue
 
                 # Extract paper information
@@ -106,108 +96,51 @@ class Scraper:
                     if li.select_one("span.CEURPAGES")
                     else None
                 )
-                abstract, keywords = self.__extract_data_from_pdf(url, volume_id, num)
+                abstract, keywords = extract_data_from_pdf(url, volume_id, num)
 
                 # Create authors and keywords
-                authors_list = soup.select("span.CEURAUTHOR")
-                authors = get_or_create_authors(authors_list)
-                keywords = get_or_create_keywords(keywords)
-
+                # authors = [
+                #     author.string for author in soup.select("span.CEURAUTHOR") if author
+                # ]
+                authors = [
+                    author.string for author in li.find_all("span", class_="CEURAUTHOR")
+                ]
                 # Create Paper object
                 paper = Paper(
-                    url=url, title=title_element.string, pages=pages, abstract=abstract
+                    url=url,
+                    title=title_element.string,
+                    pages=pages,
+                    abstract=abstract,
+                    keywords=keywords,
+                    authors=authors,
                 )
-                paper.save()
-
-                # Connect authors and keywords to the paper
-                for author in authors:
-                    paper.authors.connect(author)
-                for keyword in keywords:
-                    paper.keywords.connect(keyword)
-                logging.info(
-                    f"Paper {num} in {volume_id} metadata and relationships successfully saved."
-                )
-
                 papers.append(paper)
+            return papers
         except ValueError as e:
             logging.error(f"{volume_id} paper {num}, Scraping error: {e}")
         except Exception as e:
             logging.error(f"{volume_id} paper {num}, An unexpected error occurred: {e}")
 
-        return papers
 
-    def __extract_data_from_pdf(self, url, volume_id, num):
-        # get and save the pdf
-        response = requests.get(url)
-        pdf_path = Path("./data/tmp")
-        pdf_path.mkdir(parents=True, exist_ok=True)
-        pdf_name = f"{volume_id}-{num}.pdf"
-        pdf_filepath = pdf_path / pdf_name
-        with open(pdf_filepath, "wb") as f:
-            f.write(response.content)
+def extract_data_from_pdf(url, volume_id, num):
+    # get and save the pdf
+    response = requests.get(url)
+    pdf_path = Path("./data/tmp")
+    pdf_path.mkdir(parents=True, exist_ok=True)
+    pdf_name = f"{volume_id}-{num}.pdf"
+    pdf_filepath = pdf_path / pdf_name
+    with open(pdf_filepath, "wb") as f:
+        f.write(response.content)
 
-        # extract abstract and keywords from pdf
-        reader = PdfReader(pdf_filepath)
-        page = reader.pages[0]
-        text = page.extract_text().lower()
-        abstract = extract_abstract(text)
-        keywords = extract_keywords(text)
-        # delete the saved pdf file
-        os.remove(pdf_filepath)
-        return abstract, keywords
-
-
-def get_or_create_voleditors(editors_list):
-    editors_list = [name.string for name in editors_list]
-    query = """
-    UNWIND $names AS name
-    MERGE (p:Person {name: name})
-    RETURN p
-    """
-
-    # Parameters
-    params = {"names": editors_list}
-
-    # Execute the query
-    results, _ = db.cypher_query(query, params)
-    editors = [Person.inflate(row[0]) for row in results]
-
-    return editors
-
-
-def get_or_create_authors(authors_list):
-    authors_list = [name.string for name in authors_list]
-    query = """
-    UNWIND $names AS name
-    MERGE (p:Person {name: name})
-    RETURN p
-    """
-
-    # Parameters
-    params = {"names": authors_list}
-
-    # Execute the query
-    results, _ = db.cypher_query(query, params)
-    authors = [Person.inflate(row[0]) for row in results]
-
-    return authors
-
-
-def get_or_create_keywords(keywords):
-    query = """
-    UNWIND $names AS name
-    MERGE (p:Keyword {name: name})
-    RETURN p
-    """
-
-    # Parameters
-    params = {"names": keywords}
-
-    # Execute the query
-    results, _ = db.cypher_query(query, params)
-    keywords = [Keyword.inflate(row[0]) for row in results]
-
-    return keywords
+    # extract abstract and keywords from pdf
+    reader = PdfReader(pdf_filepath)
+    page = reader.pages[0]
+    text = page.extract_text().lower()
+    abstract = extract_abstract(text)
+    keywords = extract_keywords(text)
+    # delete the saved pdf file
+    os.remove(pdf_filepath)
+    return abstract, keywords
 
 
 def extract_abstract(text):

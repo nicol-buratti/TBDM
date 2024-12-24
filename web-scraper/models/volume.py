@@ -21,7 +21,6 @@ class Volume(StructuredNode):
     papers = RelationshipTo(Paper, "CONTAINS")
 
     def to_dict(self):
-        editors = [editor.to_dict() for editor in self.voleditor]
         papers = [paper.to_dict() for paper in self.papers]
 
         return {
@@ -33,7 +32,7 @@ class Volume(StructuredNode):
             "voltitle": self.voltitle,
             "fulltitle": self.fulltitle,
             "loctime": self.loctime,
-            "editors": editors,
+            "editors": self.voleditor,
             "papers": papers,
         }
 
