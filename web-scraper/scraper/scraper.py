@@ -73,11 +73,10 @@ class Scraper:
             )
             return volume
 
+        except ValueError as e:
+            logging.error(f"{volume_id}, Scraping error: {e}")
         except Exception as e:
-            logging.error(
-                f"An unexpected error occurred while processing volume {volume_id}: {e.with_traceback()}"
-            )
-            return None
+            logging.error(f"{volume_id}, An unexpected error occurred: {e}")
 
     def get_volume_metadata_first_900(self, volume_id):
         pass
@@ -125,6 +124,9 @@ class Scraper:
                     paper.authors.connect(author)
                 for keyword in keywords:
                     paper.keywords.connect(keyword)
+                logging.info(
+                    f"Paper {num} in {volume_id} metadata and relationships successfully saved."
+                )
 
                 papers.append(paper)
         except ValueError as e:
@@ -156,6 +158,7 @@ class Scraper:
 
 
 def get_or_create_voleditors(editors_list):
+    editors_list = [name.string for name in editors_list]
     query = """
     UNWIND $names AS name
     MERGE (p:Person {name: name})
