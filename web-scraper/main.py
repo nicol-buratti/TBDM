@@ -8,6 +8,8 @@ from neomodel import config
 from tqdm import tqdm
 
 from models.database import Neo4jDatabase
+from models.paper import Paper
+from models.volume import Volume
 from scraper.scraper import Scraper
 from neomodel import db
 
@@ -57,7 +59,7 @@ def main():
     volume_path = Path("./data/Volumes")
     os.makedirs(volume_path, exist_ok=True)
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         # Submit each volume scraping task to executor
 
         for volume in tqdm(
@@ -74,17 +76,15 @@ def main():
 
         # Save all volumes in the database
         # TODO still to test
-        json_files = (
-            file
-            for file in Path("path/to/json/files").iterdir()
-            if file.suffix == ".json"
-        )
+        json_files = (file for file in volume_path.iterdir() if file.suffix == ".json")
 
         for volume in tqdm(
             executor.map(load_json, json_files),
             desc="Saving volumes",
             unit="volume",
         ):
+            volume = Volume(**volume)
+            volume.papers = [Paper(**paper) for paper in volume.papers]
             Neo4jDatabase.create_volume(volume)
 
 
@@ -95,16 +95,3 @@ if __name__ == "__main__":
     """
     )
     main()
-    # p1 = Person(name="gio")
-    # file_path = "gio.json"
-
-    # # Writing the object to a JSON file
-    # with open(file_path, "w") as json_file:
-    #     json.dump(p1.to_dict(), json_file, indent=4)
-
-    # p2 = Person(name="mama").save()
-    # file_path = "mama.json"
-
-    # # Writing the object to a JSON file
-    # with open(file_path, "w") as json_file:
-    #     json.dump(p2.to_dict(), json_file, indent=4)

@@ -42,25 +42,38 @@ class Scraper:
         try:
             # Generate the list of editors
             voleditor = [
-                name.string for name in soup.find_all("span", class_="CEURVOLEDITOR")
+                name.string
+                for name in soup.find_all("span", class_="CEURVOLEDITOR")
+                if name
             ]
 
             # Fetch volume papers
             papers = self.get_volume_papers(volume_id)
 
+            title = soup.title
+            volnr = volume_id  # Ensure 'volume_id' is defined earlier in your code
+            urn = soup.find("span", class_="CEURURN")
+            pubyear = soup.find("span", class_="CEURPUBYEAR")
+            volacronym = soup.find("span", class_="CEURVOLACRONYM")
+            voltitle = soup.find("span", class_="CEURVOLTITLE")
+            fulltitle = soup.find("span", class_="CEURFULLTITLE")
+            loctime = soup.find("span", class_="CEURLOCTIME")
+
+            vol = {
+                "title": title.string if title else None,
+                "volnr": volnr,
+                "urn": urn.string if urn else None,
+                "pubyear": pubyear.string if pubyear else None,
+                "volacronym": volacronym.string if volacronym else None,
+                "voltitle": voltitle.string if voltitle else None,
+                "fulltitle": fulltitle.string if fulltitle else None,
+                "loctime": loctime.string if loctime else None,
+                "voleditor": voleditor,
+                "papers": papers,
+            }
+
             # Create and save volume node
-            volume = Volume(
-                title=soup.title.string,
-                volnr=soup.find("span", class_="CEURVOLNR").string,
-                urn=soup.find("span", class_="CEURURN").string,
-                pubyear=soup.find("span", class_="CEURPUBYEAR").string,
-                volacronym=soup.find("span", class_="CEURVOLACRONYM").string,
-                voltitle=soup.find("span", class_="CEURVOLTITLE").string,
-                fulltitle=soup.find("span", class_="CEURFULLTITLE").string,
-                loctime=soup.find("span", class_="CEURLOCTIME").string,
-                voleditor=voleditor,
-                papers=papers,
-            )
+            volume = Volume(**vol)
 
             return volume
 
@@ -78,9 +91,9 @@ class Scraper:
         # Fetch page content
         response = requests.get(self.base_url + volume_id)
         soup = BeautifulSoup(response.text, "html.parser")
-        try:
-            papers = []
+        papers = []
 
+        try:
             # Find all list items within the div with class "CEURTOC"
             for num, li in enumerate(soup.select("div.CEURTOC li")):
                 title_element = li.select_one("span.CEURTITLE")
@@ -103,7 +116,9 @@ class Scraper:
                 #     author.string for author in soup.select("span.CEURAUTHOR") if author
                 # ]
                 authors = [
-                    author.string for author in li.find_all("span", class_="CEURAUTHOR")
+                    author.string
+                    for author in li.find_all("span", class_="CEURAUTHOR")
+                    if author
                 ]
                 # Create Paper object
                 paper = Paper(
@@ -115,11 +130,12 @@ class Scraper:
                     authors=authors,
                 )
                 papers.append(paper)
-            return papers
         except ValueError as e:
             logging.error(f"{volume_id} paper {num}, Scraping error: {e}")
         except Exception as e:
             logging.error(f"{volume_id} paper {num}, An unexpected error occurred: {e}")
+        finally:
+            return papers
 
 
 def extract_data_from_pdf(url, volume_id, num):
