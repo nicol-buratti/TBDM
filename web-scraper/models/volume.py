@@ -17,7 +17,7 @@ class Volume(StructuredNode):
     voltitle = StringProperty()
     fulltitle = StringProperty()
     loctime = StringProperty()
-    voleditor = RelationshipTo(Person, "EDITOR")
+    voleditors = RelationshipTo(Person, "EDITOR")
     papers = RelationshipTo(Paper, "CONTAINS")
 
     def to_dict(self):
@@ -32,12 +32,12 @@ class Volume(StructuredNode):
             "voltitle": self.voltitle,
             "fulltitle": self.fulltitle,
             "loctime": self.loctime,
-            "editors": self.voleditor,
+            "voleditors": self.voleditors,
             "papers": papers,
         }
 
     def __str__(self):
-        editor_names = [editor.name for editor in self.voleditor]
+        editor_names = [editor.name for editor in self.voleditors]
         editor_str = ", ".join(editor_names) if editor_names else "No editor"
 
         paper_titles = [paper.title for paper in self.papers]
