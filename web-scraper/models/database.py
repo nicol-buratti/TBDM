@@ -1,5 +1,4 @@
 import logging
-from abc import abstractmethod
 
 from models.paper import Keyword, Paper
 from models.people import Person
@@ -9,14 +8,14 @@ from neomodel import db
 
 class Neo4jDatabase:
 
-    @abstractmethod
+    @staticmethod
     def create_volume(volume: Volume):
-        logging.info("Attempting to create the volume node: %s", volume.volnr)
+        logging.debug("Attempting to create the volume node: %s", volume.volnr)
 
         try:
             # Ensure editors are created or retrieved
-            editors = get_or_create_voleditors(volume.voleditor)
-            volume.voleditor = None
+            editors = get_or_create_voleditors(volume.voleditors)
+            volume.voleditors = None
 
             # Ensure papers are created or retrieved
             papers = [Neo4jDatabase.create_paper(paper) for paper in volume.papers]
@@ -27,7 +26,7 @@ class Neo4jDatabase:
 
             # Connect relationships (editor relationships)
             for editor in editors:
-                volume.voleditor.connect(editor)
+                volume.voleditors.connect(editor)
 
             # Connect relationships (paper relationships)
             for paper in papers:
@@ -45,9 +44,9 @@ class Neo4jDatabase:
                 str(e),
             )
 
-    @abstractmethod
+    @staticmethod
     def create_paper(paper: Paper):
-        logging.info("Attempting to create a paper node with id: %s", paper.url)
+        logging.debug("Attempting to create a paper node with id: %s", paper.url)
 
         try:
             # Ensure authors and keywords are created or retrieved
@@ -77,19 +76,21 @@ class Neo4jDatabase:
 
 
 def get_or_create_voleditors(editors_list):
-    query = """
-    UNWIND $names AS name
-    MERGE (p:Person {name: name})
-    RETURN p
-    """
+    try:
+        query = """
+        UNWIND $names AS name
+        MERGE (p:Person {name: name})
+        RETURN p
+        """
 
-    # Parameters
-    params = {"names": editors_list}
+        # Parameters
+        params = {"names": editors_list}
 
-    # Execute the query
-    results, _ = db.cypher_query(query, params)
-    editors = [Person.inflate(row[0]) for row in results]
-
+        # Execute the query
+        results, _ = db.cypher_query(query, params)
+        editors = [Person.inflate(row[0]) for row in results]
+    except AttributeError as e:
+        logging.debug(f"get_or_create_voleditors: {e}")
     return editors
 
 

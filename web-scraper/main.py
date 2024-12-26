@@ -41,7 +41,9 @@ def load_json(file_path):
     try:
         with open(file_path, "r") as file:
             data = json.load(file)
-        return data
+        volume = Volume(**data)
+        volume.papers = [Paper(**paper) for paper in volume.papers]
+        return volume
     except Exception as e:
         logging.error(f"Error loading {file_path}: {e}")
         return None
@@ -83,8 +85,6 @@ def main():
             desc="Saving volumes",
             unit="volume",
         ):
-            volume = Volume(**volume)
-            volume.papers = [Paper(**paper) for paper in volume.papers]
             Neo4jDatabase.create_volume(volume)
 
 
