@@ -15,14 +15,15 @@ class Neo4jDatabase:
         try:
             # Ensure editors are created or retrieved
             editors = get_or_create_voleditors(volume.voleditors)
-            volume.voleditors = None
 
             # Ensure papers are created or retrieved
             papers = [Neo4jDatabase.create_paper(paper) for paper in volume.papers]
-            volume.papers = None
 
+            dic = volume.to_dict()
+            del dic["voleditors"]
+            del dic["papers"]
             # Save the volume node itself
-            volume.save()
+            volume = Volume(**dic).save()
 
             # Connect relationships (editor relationships)
             for editor in editors:
@@ -49,15 +50,15 @@ class Neo4jDatabase:
         logging.debug("Attempting to create a paper node with id: %s", paper.url)
 
         try:
-            # Ensure authors and keywords are created or retrieved
+            # Save the authors and keywords
             authors = get_or_create_authors(paper.authors)
-            paper.authors = None
-
             keywords = get_or_create_keywords(paper.keywords)
-            paper.keywords = None
 
+            dic = paper.to_dict()
+            del dic["keywords"]
+            del dic["authors"]
             # Save the paper node itself
-            paper.save()
+            paper = Paper(**dic).save()
 
             # Connect relationships
             for author in authors:

@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from models.database import Neo4jDatabase
 from models.paper import Paper
+from models.people import Person
 from models.volume import Volume
 from scraper.scraper import Scraper
 from neomodel import db
