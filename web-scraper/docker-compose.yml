@@ -1,16 +1,13 @@
 services:
+  web-scraper:
+    build:
+      context: .
+    ports:
+      - 8000:8000
+    depends_on:
+      - neo4j-db
 
-  # app:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   volumes:
-  #     - .:/usr/src/app
-  #   ports:
-  #     - "8000:8000" # Map port 8000 of the container to port 8000 on the host (adjust as needed)
-  #   command: [ "python", "./main.py" ] # Override CMD if necessary
-
-  neo4j:
+  neo4j-db:
     image: neo4j:4.4-community
     volumes:
       - /$HOME/neo4j/logs:/logs
