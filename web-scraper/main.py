@@ -4,21 +4,32 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from neomodel import config
+from neo4j.exceptions import ServiceUnavailable
 from tqdm import tqdm
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+    retry_if_exception_type,
+    RetryError,
+)
+from dotenv import load_dotenv
 
 from models.database import Neo4jDatabase
 from models.paper import Paper
 from models.volume import Volume
 from scraper.scraper import Scraper
-from neomodel import db
+from neomodel import db, config
 
 logging.basicConfig(
     filename="scraping.log",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
-config.DATABASE_URL = "bolt://neo4j:password@localhost:7687"
+
+load_dotenv()
+NEO4J_URI = os.getenv("NEO4J_URI")
+config.DATABASE_URL = NEO4J_URI
 
 
 def load_json_volume(file_path):
@@ -64,17 +75,36 @@ def main():
                 json.dump(volume.to_dict(), json_file, indent=4)
 
         # Save all volumes in the database
-        json_files = (file for file in volume_path.iterdir() if file.suffix == ".json")
+        json_files = [file for file in volume_path.iterdir() if file.suffix == ".json"]
 
         for _ in tqdm(
             executor.map(process_volume, json_files),
+            total=len(json_files),
             desc="Saving volumes",
             unit="volume",
         ):
             pass
 
 
+@retry(
+    wait=wait_fixed(2),
+    stop=stop_after_attempt(10),
+    retry=retry_if_exception_type(ServiceUnavailable),
+)
+def connect_to_database():
+    db.cypher_query("RETURN 1")  # Simple query to validate the connection
+
+
 if __name__ == "__main__":
+    try:
+        connect_to_database()
+    except RetryError as e:
+        logging.critical(
+            f"Failed to reconnect to Neo4j after multiple attempts. Error: {str(e)}"
+        )
+        raise
+
+    logging.info("Connected to Neo4j successfully.")
     db.cypher_query(
         """MATCH (n)
     DETACH DELETE n
