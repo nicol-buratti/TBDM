@@ -17,6 +17,7 @@ class Scraper:
     base_url = "https://ceur-ws.org/"
 
     def get_all_volumes(self):
+        # Since this function can take a while, the volume numbers are cached
         if os.path.exists("volumes.json"):
             logging.info("Getting cached volumes")
             with open("volumes.json", "r") as file:
@@ -51,7 +52,7 @@ class Scraper:
             papers = self.get_volume_papers(volume_id)
 
             title = soup.title
-            volnr = volume_id  # Ensure 'volume_id' is defined earlier in your code
+            volnr = volume_id
             urn = soup.find("span", class_="CEURURN")
             pubyear = soup.find("span", class_="CEURPUBYEAR")
             volacronym = soup.find("span", class_="CEURVOLACRONYM")
@@ -72,7 +73,6 @@ class Scraper:
                 "papers": papers,
             }
 
-            # Create and save volume node
             volume = Volume(**vol)
 
             return volume
@@ -83,18 +83,17 @@ class Scraper:
             logging.error(f"{volume_id}, An unexpected error occurred: {e}")
 
     def get_volume_metadata_first_900(self, volume_id):
+        # TODO
         pass
 
     def get_volume_papers(self, volume_id) -> List[Paper]:
         logging.info(f"Getting all papers for {volume_id}")
 
-        # Fetch page content
         response = requests.get(self.base_url + volume_id)
         soup = BeautifulSoup(response.text, "html.parser")
         papers = []
 
         try:
-            # Find all list items within the div with class "CEURTOC"
             for num, li in enumerate(soup.select("div.CEURTOC li")):
                 title_element = li.select_one("span.CEURTITLE")
                 if not (
@@ -102,7 +101,6 @@ class Scraper:
                 ):  # Skip non-paper content
                     continue
 
-                # Extract paper information
                 url = self.base_url + volume_id + "/" + li.a["href"]
                 pages = (
                     li.select_one("span.CEURPAGES").string
@@ -111,10 +109,6 @@ class Scraper:
                 )
                 abstract, keywords = extract_data_from_pdf(url, volume_id, num)
 
-                # Create authors and keywords
-                # authors = [
-                #     author.string for author in soup.select("span.CEURAUTHOR") if author
-                # ]
                 authors = [
                     author.string
                     for author in li.find_all("span", class_="CEURAUTHOR")
@@ -164,6 +158,7 @@ def extract_abstract(text):
     start_found = False
     extracted_lines = []
 
+    # Extract the text between "abstract" and "keywords" or "introduction"
     for line in lines:
         if "abstract" in line:
             start_found = True
@@ -189,6 +184,7 @@ def extract_keywords(text):
     start_found = False
     extracted_lines = []
 
+    # Extract text between "keywords" and "introduction" or "."
     for line in lines:
         if "keywords" in line:
             start_found = True
