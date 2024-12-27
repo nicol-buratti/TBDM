@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debugger Python: File corrente",
+            "name": "web-scraper",
             "type": "debugpy",
             "request": "launch",
             "program": "main.py",
