@@ -13,16 +13,14 @@ class Neo4jDatabase:
         logging.debug("Attempting to create the volume node: %s", volume.volnr)
 
         try:
-            # Ensure editors are created or retrieved
-            editors = get_or_create_voleditors(volume.voleditors)
-
-            # Ensure papers are created or retrieved
+            # Before saving a Volume object, its relationships must be saved
+            editors = get_or_create_person(volume.voleditors)
             papers = [Neo4jDatabase.create_paper(paper) for paper in volume.papers]
 
+            # Remove the relationships from the Volume object in order for it to be saved correctly
             dic = volume.to_dict()
             del dic["voleditors"]
             del dic["papers"]
-            # Save the volume node itself
             volume = Volume(**dic).save()
 
             # Connect relationships (editor relationships)
@@ -51,7 +49,7 @@ class Neo4jDatabase:
 
         try:
             # Save the authors and keywords
-            authors = get_or_create_authors(paper.authors)
+            authors = get_or_create_person(paper.authors)
             keywords = get_or_create_keywords(paper.keywords)
 
             dic = paper.to_dict()
@@ -76,7 +74,7 @@ class Neo4jDatabase:
             raise
 
 
-def get_or_create_voleditors(editors_list):
+def get_or_create_person(people_list):
     try:
         query = """
         UNWIND $names AS name
@@ -85,45 +83,30 @@ def get_or_create_voleditors(editors_list):
         """
 
         # Parameters
-        params = {"names": editors_list}
+        params = {"names": people_list}
 
         # Execute the query
         results, _ = db.cypher_query(query, params)
-        editors = [Person.inflate(row[0]) for row in results]
-    except AttributeError as e:
-        logging.debug(f"get_or_create_voleditors: {e}")
-    return editors
-
-
-def get_or_create_authors(authors_list):
-    query = """
-    UNWIND $names AS name
-    MERGE (p:Person {name: name})
-    RETURN p
-    """
-
-    # Parameters
-    params = {"names": authors_list}
-
-    # Execute the query
-    results, _ = db.cypher_query(query, params)
-    authors = [Person.inflate(row[0]) for row in results]
-
-    return authors
+        people = [Person.inflate(row[0]) for row in results]
+        return people
+    except Exception as e:
+        logging.error(f"Failed to save Person object. Error:{str(e)}")
 
 
 def get_or_create_keywords(keywords):
-    query = """
-    UNWIND $names AS name
-    MERGE (p:Keyword {name: name})
-    RETURN p
-    """
+    try:
+        query = """
+        UNWIND $names AS name
+        MERGE (p:Keyword {name: name})
+        RETURN p
+        """
 
-    # Parameters
-    params = {"names": keywords}
+        # Parameters
+        params = {"names": keywords}
 
-    # Execute the query
-    results, _ = db.cypher_query(query, params)
-    keywords = [Keyword.inflate(row[0]) for row in results]
-
-    return keywords
+        # Execute the query
+        results, _ = db.cypher_query(query, params)
+        keywords = [Keyword.inflate(row[0]) for row in results]
+        return keywords
+    except Exception as e:
+        logging.error(f"Failed to save Keyword object. Error:{str(e)}")
