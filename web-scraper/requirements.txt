@@ -8,3 +8,5 @@ pyspark==3.5.4
 beautifulsoup4==4.10.0
 requests==2.32.3
 tqdm==4.67.1
+tenacity==9.0.0
+python-dotenv==1.0.1
