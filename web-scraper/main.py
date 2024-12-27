@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 from models.database import Neo4jDatabase
 from models.paper import Paper
-from models.people import Person
 from models.volume import Volume
 from scraper.scraper import Scraper
 from neomodel import db
@@ -22,23 +21,7 @@ logging.basicConfig(
 config.DATABASE_URL = "bolt://neo4j:password@localhost:7687"
 
 
-def scrape_volume(volume_id: int, scraper: Scraper, volume_path: Path):
-    volume_metadata = scraper.get_volume_metadata(volume_id)
-    # if the scraping failed
-    if not volume_metadata:
-        return
-
-    file_path = volume_path / f"{volume_id}.json"
-
-    # Writing the object to a JSON file
-    with open(file_path, "w") as json_file:
-        json.dump(volume_metadata.to_dict(), json_file, indent=4)
-
-    Neo4jDatabase.create_volume(volume_metadata)
-    return volume_metadata
-
-
-def load_json(file_path):
+def load_json_volume(file_path):
     try:
         with open(file_path, "r") as file:
             data = json.load(file)
@@ -47,14 +30,15 @@ def load_json(file_path):
         return volume
     except Exception as e:
         logging.error(f"Error loading {file_path}: {e}")
-        return None
+
+
+def process_volume(json_file):
+    volume = load_json_volume(json_file)
+    Neo4jDatabase.create_volume(volume)
+    return volume
 
 
 def main():
-    # import logging
-
-    # logger = logging.getLogger()  # Get the root logger
-    # logger.setLevel(logging.ERROR)
     scraper = Scraper()
 
     all_volumes = scraper.get_all_volumes()
@@ -63,30 +47,31 @@ def main():
     os.makedirs(volume_path, exist_ok=True)
 
     with ThreadPoolExecutor(max_workers=20) as executor:
-        # Submit each volume scraping task to executor
 
+        # Extract all volumes informations and save them in json files
         for volume in tqdm(
             executor.map(scraper.get_volume_metadata, all_volumes),
             total=len(all_volumes),
             desc="Processing volumes",
             unit="volume",
         ):
-            file_path = volume_path / f"{volume.volnr}.json"
+            # The scraping failed
+            if not volume:
+                continue
 
-            # Writing the object to a JSON file
+            file_path = volume_path / f"{volume.volnr}.json"
             with open(file_path, "w") as json_file:
                 json.dump(volume.to_dict(), json_file, indent=4)
 
         # Save all volumes in the database
-        # TODO still to test
         json_files = (file for file in volume_path.iterdir() if file.suffix == ".json")
 
-        for volume in tqdm(
-            executor.map(load_json, json_files),
+        for _ in tqdm(
+            executor.map(process_volume, json_files),
             desc="Saving volumes",
             unit="volume",
         ):
-            Neo4jDatabase.create_volume(volume)
+            pass
 
 
 if __name__ == "__main__":
