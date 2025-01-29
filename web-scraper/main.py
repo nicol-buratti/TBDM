@@ -20,9 +20,16 @@ from models.paper import Paper
 from models.volume import Volume
 from scraper.scraper import Scraper
 from neomodel import db, config
+from datetime import datetime
+
+log_path = Path("logs")
+log_path.mkdir(parents=True, exist_ok=True)
+
+current_time = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+log_file_path = log_path / f"scraping{current_time}.log"
 
 logging.basicConfig(
-    filename="scraping.log",
+    filename=log_file_path,
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
@@ -88,7 +95,7 @@ def main():
 
 @retry(
     wait=wait_fixed(2),
-    stop=stop_after_attempt(10),
+    stop=stop_after_attempt(20),
     retry=retry_if_exception_type(ServiceUnavailable),
 )
 def connect_to_database():
