@@ -19,7 +19,7 @@ services:
     build:
       context: ./web-scraper
     volumes:
-      - .:/app
+      - ./logs:/app/logs
     ports:
       - 8000:8000
     depends_on:
