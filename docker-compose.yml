@@ -1,0 +1,36 @@
+services:
+  neo4j:
+    image: neo4j:4.4-community
+    volumes:
+      - /$HOME/neo4j/logs:/logs
+      - /$HOME/neo4j/config:/config
+      - /$HOME/neo4j/data:/data
+      - /$HOME/neo4j/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    restart: always
+    networks:
+      - shared-network
+
+  web-scraper:
+    build:
+      context: ./web-scraper
+    volumes:
+      - .:/app
+    ports:
+      - 8000:8000
+    depends_on:
+      - neo4j
+    environment:
+      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
+    networks:
+      - shared-network
+    profiles:
+      - scraper
+
+networks:
+  shared-network:
+    driver: bridge
