@@ -60,7 +60,7 @@ class Scraper:
             fulltitle = soup.find("span", class_="CEURFULLTITLE")
             loctime = soup.find("span", class_="CEURLOCTIME")
 
-            vol = {
+            volume = {
                 "title": title.string if title else None,
                 "volnr": volnr,
                 "urn": urn.string if urn else None,
@@ -69,11 +69,11 @@ class Scraper:
                 "voltitle": voltitle.string if voltitle else None,
                 "fulltitle": fulltitle.string if fulltitle else None,
                 "loctime": loctime.string if loctime else None,
-                "voleditor": voleditor,
-                "papers": papers,
+                "voleditors": voleditor,
+                "papers": [p.__dict__ for p in papers],
             }
 
-            volume = Volume(**vol)
+            # volume = Volume(**vol)
 
             return volume
 

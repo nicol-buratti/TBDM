@@ -14,11 +14,13 @@ class Neo4jDatabase:
 
         try:
             # Before saving a Volume object, its relationships must be saved
-            editors = get_or_create_person(volume.voleditors)
+            editor_names = [e.name for e in volume.voleditors]
+            editors = get_or_create_person(editor_names)
+            editors = editors if editors else []
             papers = [Neo4jDatabase.create_paper(paper) for paper in volume.papers]
 
             # Remove the relationships from the Volume object in order for it to be saved correctly
-            dic = volume.to_dict()
+            dic = volume.__dict__
             del dic["voleditors"]
             del dic["papers"]
             volume = Volume(**dic).save()
