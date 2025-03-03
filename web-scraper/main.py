@@ -6,13 +6,6 @@ from pathlib import Path
 
 from neo4j.exceptions import ServiceUnavailable
 from tqdm import tqdm
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_fixed,
-    retry_if_exception_type,
-    RetryError,
-)
 from dotenv import load_dotenv
 
 from models.database import Neo4jDatabase
@@ -95,25 +88,11 @@ def main():
         ):
             pass
 
-
-@retry(
-    wait=wait_fixed(2),
-    stop=stop_after_attempt(20),
-    retry=retry_if_exception_type(ServiceUnavailable),
-)
 def connect_to_database():
     db.cypher_query("RETURN 1")  # Simple query to validate the connection
 
 
 if __name__ == "__main__":
-    try:
-        connect_to_database()
-    except RetryError as e:
-        logging.critical(
-            f"Failed to reconnect to Neo4j after multiple attempts. Error: {str(e)}"
-        )
-        raise
-
     logging.info("Connected to Neo4j successfully.")
     db.cypher_query(
         """MATCH (n)
