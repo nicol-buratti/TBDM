@@ -6,20 +6,21 @@ services:
       - /$HOME/neo4j/config:/config
       - /$HOME/neo4j/data:/data
       - /$HOME/neo4j/plugins:/plugins
-    # environment:
-    #   - NEO4J_AUTH=neo4j/password
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["graph-data-science"]
     ports:
       - "7474:7474"
       - "7687:7687"
     restart: always
     networks:
-      - shared-network
+      - scraper-network
+      - spark-net
+    profiles:
+      - scraper
+      - injection
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1",
-        ]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
 
   web-scraper:
     build:
@@ -34,12 +35,84 @@ services:
         condition: service_healthy
     environment:
       - NEO4J_URI=bolt://neo4j:password@neo4j:7687
-      # - NEO4J_PLUGINS=["graph-data-science"]
     networks:
-      - shared-network
+      - scraper-network
     profiles:
       - scraper
 
+  jupyterlab:
+    image: quay.io/jupyter/pyspark-notebook:spark-3.5.3
+    container_name: pyspark-notebook
+    command: start-notebook.py --NotebookApp.token=''
+    ports:
+      - 8888:8888
+      - 4040:4040
+    volumes:
+      - shared-workspace:/home/jovyan/work
+    networks:
+      - spark-net
+    profiles:
+      - injection
+
+  spark:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    ports:
+      - '8080:8080'
+      - '7077:7077'
+    volumes:
+      # - shared-workspace:/vol
+      - ./data:/home/jovyan/work/data:rw
+    networks:
+      - spark-net
+    profiles:
+      - injection
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    depends_on:
+      - spark
+    deploy:
+      replicas: 1
+    volumes:
+      # - shared-workspace:/vol
+      - ./data:/home/jovyan/work/data:rw
+      # - ./data:${PWD}/data:rw
+    networks:
+      - spark-net
+    profiles:
+      - injection
+
+volumes:
+  shared-workspace:
+    driver: local
+    driver_opts:
+      type: "none"
+      o: "bind"
+      device: "${PWD}" # Current directory
+
 networks:
-  shared-network:
+  scraper-network:
+    driver: bridge
+  spark-net:
     driver: bridge
