@@ -10,3 +10,8 @@ to run the submodules like the web-scraper:
 ```console
 docker compose --profile scraper up
 ```
+
+to run the data injection notebook
+```console
+docker compose --profile injection up
+```
