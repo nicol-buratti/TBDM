@@ -16,6 +16,9 @@ services:
     networks:
       - scraper-network
       - spark-net
+    profiles:
+      - scraper
+      - injection
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
 
@@ -48,6 +51,8 @@ services:
       - shared-workspace:/home/jovyan/work
     networks:
       - spark-net
+    profiles:
+      - injection
 
   spark:
     build:
@@ -68,6 +73,8 @@ services:
       - ./data:/home/jovyan/work/data:rw
     networks:
       - spark-net
+    profiles:
+      - injection
 
   spark-worker:
     build:
@@ -93,6 +100,8 @@ services:
       # - ./data:${PWD}/data:rw
     networks:
       - spark-net
+    profiles:
+      - injection
 
 volumes:
   shared-workspace:
