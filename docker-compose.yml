@@ -44,11 +44,14 @@ services:
     image: quay.io/jupyter/pyspark-notebook:spark-3.5.3
     container_name: pyspark-notebook
     command: start-notebook.py --NotebookApp.token=''
+    restart: always
+    # user: root
     ports:
       - 8888:8888
       - 4040:4040
     volumes:
-      - shared-workspace:/home/jovyan/work
+      - shared-workspace:/home/jovyan
+    working_dir: /home/jovyan
     networks:
       - spark-net
     profiles:
@@ -69,8 +72,7 @@ services:
       - '8080:8080'
       - '7077:7077'
     volumes:
-      # - shared-workspace:/vol
-      - ./data:/home/jovyan/work/data:rw
+      - ./data:/home/jovyan/data:rw
     networks:
       - spark-net
     profiles:
@@ -95,9 +97,7 @@ services:
     deploy:
       replicas: 1
     volumes:
-      # - shared-workspace:/vol
-      - ./data:/home/jovyan/work/data:rw
-      # - ./data:${PWD}/data:rw
+      - ./data:/home/jovyan/data:rw
     networks:
       - spark-net
     profiles:
