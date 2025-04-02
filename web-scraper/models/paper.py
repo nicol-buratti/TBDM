@@ -1,38 +1,22 @@
-from neomodel import StructuredNode, StringProperty, RelationshipTo
-
 from models.people import Person
 
 
-class Keyword(StructuredNode):
-    name = StringProperty()
-
-    def to_dict(self):
-        return {"name": self.name}
+class Keyword:
+    name: str
 
     def __str__(self):
         return f"Keyword: {self.name}"
 
 
-class Paper(StructuredNode):
-    url = StringProperty()
-    title = StringProperty()
-    pages = StringProperty()
-    abstract = StringProperty()
+class Paper:
+    url: str
+    title: str
+    pages: str
+    abstract: str
 
     # Relationships
-    authors = RelationshipTo(Person, "AUTHOR")
-    keywords = RelationshipTo(Keyword, "KEYWORD")
-
-    def to_dict(self):
-
-        return {
-            "url": self.url,
-            "title": self.title,
-            "pages": self.pages,
-            "abstract": self.abstract,
-            "authors": self.authors,
-            "keywords": self.keywords,
-        }
+    authors: list[Person] = []
+    keywords: list[Keyword] = []
 
     def __str__(self):
         author_names = [author.name for author in self.authors]
