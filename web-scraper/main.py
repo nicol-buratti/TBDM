@@ -5,9 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from tqdm import tqdm
-from models.paper import Paper
-from models.volume import Volume
-from models.people import Person
 from scraper.scraper import Scraper
 from datetime import datetime
 
@@ -22,19 +19,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
-
-
-def load_json_volume(file_path):
-    try:
-        with open(file_path, "r") as file:
-            data = json.load(file)
-        data["papers"] = [Paper(**paper) for paper in data["papers"]]
-        data["voleditors"] = [Person(name=name) for name in data["voleditors"]]
-        volume = Volume(**data)
-
-        return volume
-    except Exception as e:
-        logging.error(f"Error loading {file_path}: {e}")
 
 
 def main():
@@ -58,9 +42,9 @@ def main():
             if not volume:
                 continue
 
-            file_path = volume_path / f"{volume['volnr']}.json"
+            file_path = volume_path / f"{volume.volnr}.json"
             with open(file_path, "w") as json_file:
-                json.dump(volume, json_file, indent=4)
+                json.dump(volume.to_dict(), json_file, indent=4)
 
 
 if __name__ == "__main__":

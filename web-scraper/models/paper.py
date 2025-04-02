@@ -1,3 +1,4 @@
+from typing import List
 from models.people import Person
 from dataclasses import dataclass, field
 
@@ -18,8 +19,8 @@ class Paper:
     abstract: str
 
     # Relationships
-    authors: list[Person] = field(default_factory=list)
-    keywords: list[Keyword] = field(default_factory=list)
+    authors: List[Person] = field(default_factory=list)
+    keywords: List[Keyword] = field(default_factory=list)
 
     def __str__(self):
         author_names = [author.name for author in self.authors]
@@ -29,3 +30,11 @@ class Paper:
         keywords_str = ", ".join(keyword_names) if keyword_names else "No keywords"
 
         return f"Paper: {self.title} (Authors: {authors_str}, Keywords: {keywords_str})"
+
+    def to_dict(self):
+        dic = self.__dict__
+
+        dic["authors"] = [a.__dict__ for a in self.authors]
+        dic["keywords"] = [k.__dict__ for k in self.keywords]
+
+        return dic
