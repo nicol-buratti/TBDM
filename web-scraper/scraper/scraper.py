@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -9,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
-from models.paper import Paper
+from models.paper import Keyword, Paper, Person
 from models.volume import Volume
 
 
@@ -27,7 +26,7 @@ class Scraper:
             "a", {"name": lambda value: value and value.startswith("Vol-")}
         )
 
-        vol_values = [tag["name"] for tag in vol_tags]
+        vol_values = (tag["name"] for tag in vol_tags)
         vol_values = [vol for vol in vol_values if vol not in scraped_volumes]
         return vol_values
 
@@ -40,7 +39,7 @@ class Scraper:
         try:
             # Generate the list of editors
             voleditor = [
-                name.string
+                Person(name.string)
                 for name in soup.find_all("span", class_="CEURVOLEDITOR")
                 if name
             ]
@@ -57,20 +56,18 @@ class Scraper:
             fulltitle = soup.find("span", class_="CEURFULLTITLE")
             loctime = soup.find("span", class_="CEURLOCTIME")
 
-            volume = {
-                "title": title.string if title else None,
-                "volnr": volnr,
-                "urn": urn.string if urn else None,
-                "pubyear": pubyear.string if pubyear else None,
-                "volacronym": volacronym.string if volacronym else None,
-                "voltitle": voltitle.string if voltitle else None,
-                "fulltitle": fulltitle.string if fulltitle else None,
-                "loctime": loctime.string if loctime else None,
-                "voleditors": voleditor,
-                "papers": [p.__dict__ for p in papers],
-            }
-
-            # volume = Volume(**vol)
+            volume = Volume(
+                title=title.string if title else None,
+                volnr=volnr,
+                urn=urn.string if urn else None,
+                pubyear=pubyear.string if pubyear else None,
+                volacronym=volacronym.string if volacronym else None,
+                voltitle=voltitle.string if voltitle else None,
+                fulltitle=fulltitle.string if fulltitle else None,
+                loctime=loctime.string if loctime else None,
+                voleditors=voleditor,
+                papers=papers,
+            )
 
             return volume
 
@@ -107,7 +104,7 @@ class Scraper:
                 abstract, keywords = extract_data_from_pdf(url, volume_id, num)
 
                 authors = [
-                    author.string
+                    Person(author.string)
                     for author in li.find_all("span", class_="CEURAUTHOR")
                     if author
                 ]
@@ -192,6 +189,7 @@ def extract_keywords(text):
 
     # Join the extracted lines into a single string
     string = "".join(extracted_lines)
-    return [
+    keys = (
         clear_keyword(keyword) for keyword in re.split(r"[;,]", string) if keyword != ""
-    ]
+    )
+    return [Keyword(key) for key in keys]
