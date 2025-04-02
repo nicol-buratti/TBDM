@@ -14,10 +14,8 @@ services:
       - "7687:7687"
     restart: always
     networks:
-      - scraper-network
       - spark-net
     profiles:
-      - scraper
       - injection
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
@@ -30,13 +28,6 @@ services:
       - ./data:/app/data
     ports:
       - 8000:8000
-    depends_on:
-      neo4j:
-        condition: service_healthy
-    environment:
-      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
-    networks:
-      - scraper-network
     profiles:
       - scraper
 
@@ -112,7 +103,5 @@ volumes:
       device: "${PWD}" # Current directory
 
 networks:
-  scraper-network:
-    driver: bridge
   spark-net:
     driver: bridge
