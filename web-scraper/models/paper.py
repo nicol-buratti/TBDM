@@ -1,6 +1,8 @@
 from models.people import Person
+from dataclasses import dataclass, field
 
 
+@dataclass
 class Keyword:
     name: str
 
@@ -8,6 +10,7 @@ class Keyword:
         return f"Keyword: {self.name}"
 
 
+@dataclass
 class Paper:
     url: str
     title: str
@@ -15,8 +18,8 @@ class Paper:
     abstract: str
 
     # Relationships
-    authors: list[Person] = []
-    keywords: list[Keyword] = []
+    authors: list[Person] = field(default_factory=list)
+    keywords: list[Keyword] = field(default_factory=list)
 
     def __str__(self):
         author_names = [author.name for author in self.authors]

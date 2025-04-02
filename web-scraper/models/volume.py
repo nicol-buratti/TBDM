@@ -1,7 +1,9 @@
 from models.paper import Paper
 from models.people import Person
+from dataclasses import dataclass, field
 
 
+@dataclass
 class Volume:
     title: str
     volnr: str
@@ -11,8 +13,8 @@ class Volume:
     voltitle: str
     fulltitle: str
     loctime: str
-    voleditors: list[Person] = []
-    papers: list[Paper] = []
+    voleditors: list[Person] = field(default_factory=list)
+    papers: list[Paper] = field(default_factory=list)
 
     def __str__(self):
         editor_names = [editor.name for editor in self.voleditors]
