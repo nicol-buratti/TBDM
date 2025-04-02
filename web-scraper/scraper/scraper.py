@@ -16,12 +16,9 @@ from models.volume import Volume
 class Scraper:
     base_url = "https://ceur-ws.org/"
 
-    def get_all_volumes(self):
+    def get_volumes_to_scrape(self):
         # Since this function can take a while, the volume numbers are cached
-        if os.path.exists("volumes.json"):
-            logging.info("Getting cached volumes")
-            with open("volumes.json", "r") as file:
-                return json.load(file)
+        scraped_volumes = {file.stem for file in Path("./data/Volumes").iterdir()}
 
         logging.info("Getting all volumes")
         response = requests.get(self.base_url)
@@ -29,9 +26,9 @@ class Scraper:
         vol_tags = soup.find_all(
             "a", {"name": lambda value: value and value.startswith("Vol-")}
         )
+
         vol_values = [tag["name"] for tag in vol_tags]
-        with open("volumes.json", "w") as file:
-            json.dump(vol_values, file, indent=4)
+        vol_values = [vol for vol in vol_values if vol not in scraped_volumes]
         return vol_values
 
     def get_volume_metadata(self, volume_id) -> Volume:
