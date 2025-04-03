@@ -19,15 +19,15 @@ class Scraper:
         # Since this function can take a while, the volume numbers are cached
         scraped_volumes = {file.stem for file in Path("./data/Volumes").iterdir()}
 
-        logging.info("Getting all volumes")
+        logging.info("Getting volumes to scrape")
         response = requests.get(self.base_url)
         soup = BeautifulSoup(response.text, "html.parser")
         vol_tags = soup.find_all(
             "a", {"name": lambda value: value and value.startswith("Vol-")}
         )
-
         vol_values = (tag["name"] for tag in vol_tags)
         vol_values = [vol for vol in vol_values if vol not in scraped_volumes]
+        logging.info(f"Volumes to scrape extracted: {vol_values}")
         return vol_values
 
     def get_volume_metadata(self, volume_id) -> Volume:
