@@ -12,7 +12,6 @@ services:
     ports:
       - "7474:7474"
       - "7687:7687"
-    restart: always
     networks:
       - scraper-network
       - spark-net
@@ -44,7 +43,6 @@ services:
     image: quay.io/jupyter/pyspark-notebook:spark-3.5.3
     container_name: pyspark-notebook
     command: start-notebook.py --NotebookApp.token=''
-    restart: always
     # user: root
     ports:
       - 8888:8888
