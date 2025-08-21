@@ -2,13 +2,13 @@ services:
   neo4j:
     image: neo4j:4.4-community
     volumes:
-      - /$HOME/neo4j/logs:/logs
-      - /$HOME/neo4j/config:/config
-      - /$HOME/neo4j/data:/data
-      - /$HOME/neo4j/plugins:/plugins
+      - ./neo4j/logs:/logs
+      - ./neo4j/config:/config
+      - ./neo4j/data:/data
+      - ./neo4j/plugins:/plugins
     environment:
       - NEO4J_AUTH=neo4j/password
-      - NEO4J_PLUGINS=["graph-data-science"]
+      - NEO4J_PLUGINS=graph-data-science
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -18,8 +18,13 @@ services:
     profiles:
       - scraper
       - injection
+      - streamlit
     healthcheck:
-      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "password", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   web-scraper:
     build:
@@ -33,26 +38,13 @@ services:
       neo4j:
         condition: service_healthy
     environment:
-      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
     networks:
       - scraper-network
     profiles:
       - scraper
-
-  data-injection:
-    build:
-      context: ./data-injection
-    ports:
-      - 8000:8000
-    depends_on:
-      neo4j:
-        condition: service_healthy
-    environment:
-      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
-    networks:
-      - spark-net
-    profiles:
-      - injection
 
   spark:
     build:
@@ -70,10 +62,14 @@ services:
       - '7077:7077'
     volumes:
       - ./data:/home/jovyan/data:rw
+      - ./functionalities:/home/jovyan/functionalities:rw
+      - ./data-injection:/home/jovyan/data-injection:ro
+      - ./:/home/jovyan/project:ro
     networks:
       - spark-net
     profiles:
       - injection
+      - streamlit
 
   spark-worker:
     build:
@@ -95,10 +91,91 @@ services:
       replicas: 1
     volumes:
       - ./data:/home/jovyan/data:rw
+      - ./functionalities:/home/jovyan/functionalities:rw
+      - ./data-injection:/home/jovyan/data-injection:ro
+      - ./:/home/jovyan/project:ro
     networks:
       - spark-net
     profiles:
       - injection
+      - streamlit
+
+  # Data injection service - now runs automatically during setup
+  data-injection-setup:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      spark:
+        condition: service_started
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - SPARK_MASTER_URL=spark://spark:7077
+    volumes:
+      - ./data:/home/jovyan/data:ro
+      - ./functionalities:/home/jovyan/functionalities:ro
+      - ./data-injection:/home/jovyan/data-injection:ro
+      - ./:/home/jovyan/project:ro
+    command: ["python", "/home/jovyan/project/run_injection.py"]
+    networks:
+      - spark-net
+    profiles:
+      - injection
+      - streamlit
+    restart: "no"  # Run once only
+
+  # Keep the original data-injection service for manual runs
+  data-injection:
+    build:
+      context: ./data-injection
+    ports:
+      - 8001:8000
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
+    volumes:
+      # Mount your data directory
+      - ./data:/app/data:ro
+      - ./functionalities:/app/functionalities:ro
+    networks:
+      - spark-net
+    profiles:
+      - injection-manual
+
+  streamlit-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      spark:
+        condition: service_started
+    environment:
+      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
+      - SPARK_MASTER_URL=spark://spark:7077
+    volumes:
+      - ./functionalities:/app/functionalities:ro
+      - ./models:/app/models:ro
+      - ./web-scraper:/app/scraper:ro
+      - ./data:/app/data:ro
+      - ./logs:/app/logs:rw
+      - ./:/app/project:ro
+    networks:
+      - spark-net
+    profiles:
+      - streamlit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   shared-workspace:
@@ -106,7 +183,7 @@ volumes:
     driver_opts:
       type: "none"
       o: "bind"
-      device: "${PWD}" # Current directory
+      device: . # Current directory
 
 networks:
   scraper-network:

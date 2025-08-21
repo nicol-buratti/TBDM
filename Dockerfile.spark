@@ -1,5 +1,18 @@
 FROM bitnami/spark:3.5.3
+
 USER root
-RUN install_packages curl
+
+# Install system packages and Python dependencies
+RUN install_packages curl python3-pip && \
+    pip3 install --no-cache-dir \
+        python-dotenv \
+        py4j \
+        pyspark \
+        neo4j \
+        tqdm
+
 USER 1001
-RUN curl https://repos.spark-packages.org/neo4j-contrib/neo4j-spark-connector/5.3.1-s_2.12/neo4j-spark-connector-5.3.1-s_2.12.jar --output /opt/bitnami/spark/jars/neo4j-spark-connector-5.3.1-s_2.12.jar
+
+# Download Neo4j Spark connector
+RUN curl https://repos.spark-packages.org/neo4j-contrib/neo4j-spark-connector/5.3.1-s_2.12/neo4j-spark-connector-5.3.1-s_2.12.jar \
+    --output /opt/bitnami/spark/jars/neo4j-spark-connector-5.3.1-s_2.12.jar
