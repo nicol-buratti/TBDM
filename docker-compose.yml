@@ -13,10 +13,8 @@ services:
       - "7474:7474"
       - "7687:7687"
     networks:
-      - scraper-network
       - spark-net
     profiles:
-      - scraper
       - injection
       - streamlit
     healthcheck:
@@ -87,8 +85,6 @@ services:
         condition: service_healthy
     environment:
       - NEO4J_URI=bolt://neo4j:password@neo4j:7687
-    networks:
-      - scraper-network
     profiles:
       - scraper
 
@@ -129,13 +125,6 @@ services:
     environment:
       - NEO4J_URI=bolt://neo4j:password@neo4j:7687
       - SPARK_MASTER_URL=spark://spark:7077
-    volumes:
-      - ./functionalities:/app/functionalities:ro
-      - ./models:/app/models:ro
-      - ./web-scraper:/app/scraper:ro
-      - ./data:/app/data:ro
-      - ./logs:/app/logs:rw
-      - ./:/app/project:ro
     networks:
       - spark-net
     profiles:
@@ -155,7 +144,5 @@ volumes:
       device: "${PWD}" # Current directory
 
 networks:
-  scraper-network:
-    driver: bridge
   spark-net:
     driver: bridge
