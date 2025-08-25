@@ -4,10 +4,12 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import explode, col
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from pathlib import Path
+from datetime import datetime
 
 load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
-VOLUMES = int(os.getenv("VOLUMES", -1))
+val = os.getenv("VOLUMES")
+VOLUMES = int(val) if val and val.isdigit() else -1
 
 volume_param = [
     "volnr",
@@ -252,7 +254,7 @@ def main(spark: SparkSession, volumes_to_inject):
 
 
 if __name__ == "__main__":
-    print("🔗 Neo4j Data Injection Script")
+    print(f"🔗 Neo4j Data Injection Script time:{datetime.now()}")
     print("=" * 50)
 
     # Create Spark session with Neo4j connector
@@ -270,3 +272,5 @@ if __name__ == "__main__":
     )
 
     main(spark, VOLUMES)
+
+    spark.stop()
