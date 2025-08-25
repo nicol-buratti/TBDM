@@ -36,7 +36,11 @@ WORKDIR /app
 # into this layer.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
-    python -m pip install -r requirements.txt
+    python -m pip install -r requirements.txt && \
+    apt-get update && \
+    apt-get install -y openjdk-17-jdk
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 # Switch to the non-privileged user to run the application.
 # USER appuser

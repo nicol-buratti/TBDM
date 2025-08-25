@@ -3,13 +3,7 @@ FROM bitnami/spark:3.5.3
 USER root
 
 # Install system packages and Python dependencies
-RUN install_packages curl python3-pip && \
-    pip3 install --no-cache-dir \
-        python-dotenv \
-        py4j \
-        pyspark \
-        neo4j \
-        tqdm
+RUN install_packages curl
 
 USER 1001
 
