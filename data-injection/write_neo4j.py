@@ -7,6 +7,7 @@ from pathlib import Path
 
 load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
+VOLUMES = int(os.getenv("VOLUMES", -1))
 
 volume_param = [
     "volnr",
@@ -238,7 +239,7 @@ def papers_relationships(df: DataFrame):
     create_keyword_relationship(papers)
 
 
-def main(spark: SparkSession, volumes_to_inject=-1):
+def main(spark: SparkSession, volumes_to_inject):
     json_dir = Path("./data/Volumes").__str__()
 
     # Read all JSON files in the directory
@@ -268,4 +269,4 @@ if __name__ == "__main__":
         .getOrCreate()
     )
 
-    main(spark, 1)
+    main(spark, VOLUMES)

@@ -106,6 +106,7 @@ services:
         condition: service_started
     environment:
       - NEO4J_URI=bolt://neo4j:password@neo4j:7687
+      - VOLUMES=5
     networks:
       - spark-net
     profiles:

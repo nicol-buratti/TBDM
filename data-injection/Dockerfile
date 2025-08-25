@@ -51,5 +51,9 @@ COPY . .
 # Expose the port that the application listens on.
 EXPOSE 8000
 
+# Define the number of volumes to inject (in test environment)
+ARG VOLUMES
+ENV VOLUMES=${VOLUMES}
+
 # Run the application.
 CMD ["python3", "write_neo4j.py"]
