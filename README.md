@@ -15,3 +15,8 @@ to run the data injection notebook
 ```console
 docker compose --profile injection up
 ```
+
+to run the frontend
+```console
+docker compose --profile streamlit up
+```
