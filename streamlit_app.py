@@ -90,7 +90,11 @@ def get_data_overview():
     overview = {}
     for key, query in queries.items():
         result = execute_spark_query(query)
-        overview[key] = result[0]["count"] if result else 0
+        # Use .empty to check if DataFrame is empty
+        if not result.empty:
+            overview[key] = result.iloc[0]["count"]
+        else:
+            overview[key] = 0
 
     return overview
 
@@ -243,7 +247,7 @@ def main():
 
         year_data = execute_spark_query(year_query)
 
-        if year_data:
+        if not year_data.empty:
             df_years = pd.DataFrame(year_data)
             fig_years = px.line(
                 df_years,
@@ -292,7 +296,7 @@ def main():
 
         papers_data = execute_spark_query(papers_query, parameters)
 
-        if papers_data:
+        if not papers_data.empty:
             st.success(f"Found {len(papers_data)} papers")
 
             for i, paper in enumerate(papers_data):
@@ -334,7 +338,7 @@ def main():
 
         authors_data = execute_spark_query(authors_query)
 
-        if authors_data:
+        if not authors_data.empty:
             df_authors = pd.DataFrame(authors_data)
             fig_authors = px.bar(
                 df_authors.head(10),
@@ -364,7 +368,7 @@ def main():
 
         editors_data = execute_spark_query(editors_query)
 
-        if editors_data:
+        if not editors_data.empty:
             df_editors = pd.DataFrame(editors_data)
             st.dataframe(df_editors, use_container_width=True)
 
@@ -396,7 +400,7 @@ def main():
 
             collab_data = execute_spark_query(collab_query)
 
-            if collab_data:
+            if not collab_data.empty:
                 # Prepare network data
                 nodes = []
                 edges = []
@@ -455,7 +459,7 @@ def main():
 
             pv_data = execute_spark_query(pv_query, {"limit": volume_limit})
 
-            if pv_data:
+            if not pv_data.empty:
                 nodes = []
                 edges = []
                 volumes = set()
@@ -552,19 +556,19 @@ def main():
                 """
                 try:
                     schema_result = execute_spark_query(schema_query)
-                    if schema_result:
-                        st.json(schema_result)
+                    if not schema_result.empty:
+                        st.json(schema_result.to_dict('records'))
                     else:
                         # Fallback schema query
                         labels_result = execute_spark_query("CALL db.labels()")
                         rels_result = execute_spark_query("CALL db.relationshipTypes()")
 
                         st.write("**Node Labels:**")
-                        if labels_result:
+                        if not labels_result.empty:
                             st.write([record["label"] for record in labels_result])
 
                         st.write("**Relationship Types:**")
-                        if rels_result:
+                        if not rels_result.empty:
                             st.write(
                                 [record["relationshipType"] for record in rels_result]
                             )
@@ -576,7 +580,7 @@ def main():
                 try:
                     result = execute_spark_query(query)
 
-                    if result:
+                    if not result.empty:
                         st.success(
                             f"Query executed successfully! Found {len(result)} results."
                         )
