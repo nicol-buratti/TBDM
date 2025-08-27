@@ -61,17 +61,31 @@ spark = (
     SparkSession.builder.appName("StreamlitApp")
     .master("spark://spark:7077")
     .config("spark.jars.packages", "neo4j-contrib:neo4j-spark-connector:5.3.1-s_2.12")
-    .config("neo4j.url", NEO4J_URI)
-    .config("neo4j.authentication.basic.username", "neo4j")
-    .config("neo4j.authentication.basic.password", "password")
-    .config("neo4j.database", "neo4j")
     .getOrCreate()
 )
 
 
-def execute_spark_query(query: str) -> pd.DataFrame:
+def execute_spark_query(query: str, parameters: dict = None) -> pd.DataFrame:
     """Execute a Cypher query using Spark and return results as a DataFrame"""
-    df = spark.read.format("org.neo4j.spark.DataSource").option("query", query).load()
+    if parameters:
+        for key, value in parameters.items():
+            placeholder = f"${key}"
+            if isinstance(value, str):
+                escaped_value = value.replace("'", "\\'")
+                query = query.replace(placeholder, f"'{escaped_value}'")
+            elif value is None:
+                query = query.replace(placeholder, "null")
+            else:
+                query = query.replace(placeholder, str(value))
+    
+    df = (spark.read
+        .format("org.neo4j.spark.DataSource")
+        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
+        .option("authentication.type", "basic")
+        .option("authentication.basic.username", "neo4j")
+        .option("authentication.basic.password", "password")
+        .option("query", query)
+        .load())
     return df.toPandas()
 
 
@@ -90,7 +104,6 @@ def get_data_overview():
     overview = {}
     for key, query in queries.items():
         result = execute_spark_query(query)
-        # Use .empty to check if DataFrame is empty
         if not result.empty:
             overview[key] = result.iloc[0]["count"]
         else:
@@ -277,46 +290,47 @@ def main():
 
         # Papers query
         if search_term:
-            papers_query = """
+            escaped_search = search_term.replace("'", "\\'")
+            papers_query = f"""
             MATCH (p:Paper)
-            WHERE toLower(p.title) CONTAINS toLower($search)
-            RETURN p.title as title, p.year as year, p.author as author, p.abstract as abstract
+            WHERE toLower(p.title) CONTAINS toLower('{escaped_search}')
+            WITH p
             ORDER BY p.year DESC
-            LIMIT $limit
+            WITH p LIMIT {limit}
+            RETURN p.title as title, p.year as year, p.author as author, p.abstract as abstract
             """
-            parameters = {"search": search_term, "limit": limit}
         else:
-            papers_query = """
+            papers_query = f"""
             MATCH (p:Paper)
-            RETURN p.title as title, p.year as year, p.author as author, p.abstract as abstract
+            WITH p
             ORDER BY p.year DESC
-            LIMIT $limit
+            WITH p LIMIT {limit}
+            RETURN p.title as title, p.year as year, p.author as author, p.abstract as abstract
             """
-            parameters = {"limit": limit}
 
-        papers_data = execute_spark_query(papers_query, parameters)
+        papers_data = execute_spark_query(papers_query)
 
         if not papers_data.empty:
             st.success(f"Found {len(papers_data)} papers")
 
-            for i, paper in enumerate(papers_data):
+            for i, row in papers_data.iterrows():
                 with st.expander(
-                    f"📄 {paper.get('title', 'Untitled')} ({paper.get('year', 'N/A')})"
+                    f"📄 {row.get('title', 'Untitled')} ({row.get('year', 'N/A')})"
                 ):
                     col1, col2 = st.columns([2, 1])
 
                     with col1:
-                        if paper.get("abstract"):
+                        if row.get("abstract"):
                             st.write("**Abstract:**")
-                            st.write(paper["abstract"])
+                            st.write(row["abstract"])
                         else:
                             st.write("*No abstract available*")
 
                     with col2:
-                        if paper.get("author"):
-                            st.write(f"**Author:** {paper['author']}")
-                        if paper.get("year"):
-                            st.write(f"**Year:** {paper['year']}")
+                        if row.get("author"):
+                            st.write(f"**Author:** {row['author']}")
+                        if row.get("year"):
+                            st.write(f"**Year:** {row['year']}")
         else:
             if search_term:
                 st.info(f"No papers found matching '{search_term}'")
@@ -331,9 +345,10 @@ def main():
 
         authors_query = """
         MATCH (person:Person)-[:AUTHORED]->(paper:Paper)
-        RETURN person.name
-        ORDER BY count(paper) DESC
-        LIMIT 20
+        WITH person, count(paper) as paper_count
+        ORDER BY paper_count DESC
+        WITH person.name as name, paper_count LIMIT 20
+        RETURN name, paper_count
         """
 
         authors_data = execute_spark_query(authors_query)
@@ -361,9 +376,10 @@ def main():
 
         editors_query = """
         MATCH (person:Person)-[r:EDITED]->(volume:Volume)
-        RETURN person.name as name, count(volume) as volume_count
+        WITH person, count(volume) as volume_count
         ORDER BY volume_count DESC
-        LIMIT 10
+        WITH person.name as name, volume_count LIMIT 10
+        RETURN name, volume_count
         """
 
         editors_data = execute_spark_query(editors_query)
@@ -389,13 +405,13 @@ def main():
 
             min_collaborations = st.slider("Minimum collaborations to show", 1, 5, 2)
 
-            collab_query = """
+            collab_query = f"""
             MATCH (p1:Person)-[:AUTHORED]->(paper:Paper)<-[:AUTHORED]-(p2:Person)
             WHERE p1 <> p2
             WITH p1, p2, count(paper) as shared_papers
-            WHERE shared_papers >= $min_collab
-            RETURN p1.name as author1, p2.name as author2, shared_papers
-            LIMIT 100
+            WHERE shared_papers >= {min_collaborations}
+            WITH p1.name as author1, p2.name as author2, shared_papers LIMIT 100
+            RETURN author1, author2, shared_papers
             """
 
             collab_data = execute_spark_query(collab_query)
@@ -406,7 +422,7 @@ def main():
                 edges = []
                 authors = set()
 
-                for edge in collab_data:
+                for index, edge in collab_data.iterrows():
                     authors.add(edge["author1"])
                     authors.add(edge["author2"])
 
@@ -448,16 +464,16 @@ def main():
 
             volume_limit = st.slider("Number of volumes to show", 1, 10, 5)
 
-            pv_query = """
+            pv_query = f"""
             MATCH (v:Volume)<-[:BELONGS_TO]-(p:Paper)
             WITH v, count(p) as paper_count
             ORDER BY paper_count DESC
-            LIMIT $limit
+            WITH v LIMIT {volume_limit}
             MATCH (v)<-[:BELONGS_TO]-(p:Paper)
             RETURN v.title as volume, p.title as paper
             """
 
-            pv_data = execute_spark_query(pv_query, {"limit": volume_limit})
+            pv_data = execute_spark_query(pv_query)
 
             if not pv_data.empty:
                 nodes = []
@@ -465,7 +481,7 @@ def main():
                 volumes = set()
                 papers = set()
 
-                for item in pv_data:
+                for index, item in pv_data.iterrows():
                     volumes.add(item["volume"])
                     papers.add(item["paper"])
 
@@ -519,12 +535,12 @@ def main():
 
         # Predefined queries
         sample_queries = {
-            "Show all node labels": "CALL db.labels()",
-            "Show all relationship types": "CALL db.relationshipTypes()",
-            "Sample papers": "MATCH (p:Paper) RETURN p LIMIT 5",
-            "Sample people": "MATCH (p:Person) RETURN p LIMIT 5",
-            "Sample volumes": "MATCH (v:Volume) RETURN v LIMIT 5",
-            "Paper authors": "MATCH (p:Person)-[:AUTHORED]->(paper:Paper) RETURN p.name, paper.title LIMIT 10",
+            "Show all node labels": "CALL db.labels() YIELD label RETURN label",
+            "Show all relationship types": "CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType",
+            "Sample papers": "MATCH (p:Paper) WITH p LIMIT 5 RETURN p",
+            "Sample people": "MATCH (p:Person) WITH p LIMIT 5 RETURN p",
+            "Sample volumes": "MATCH (v:Volume) WITH v LIMIT 5 RETURN v",
+            "Paper authors": "MATCH (p:Person)-[:AUTHORED]->(paper:Paper) WITH p.name as name, paper.title as title LIMIT 10 RETURN name, title",
         }
 
         selected_query = st.selectbox(
@@ -560,18 +576,16 @@ def main():
                         st.json(schema_result.to_dict('records'))
                     else:
                         # Fallback schema query
-                        labels_result = execute_spark_query("CALL db.labels()")
-                        rels_result = execute_spark_query("CALL db.relationshipTypes()")
+                        labels_result = execute_spark_query("CALL db.labels() YIELD label RETURN label")
+                        rels_result = execute_spark_query("CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType")
 
                         st.write("**Node Labels:**")
                         if not labels_result.empty:
-                            st.write([record["label"] for record in labels_result])
+                            st.write(labels_result["label"].tolist())
 
                         st.write("**Relationship Types:**")
                         if not rels_result.empty:
-                            st.write(
-                                [record["relationshipType"] for record in rels_result]
-                            )
+                            st.write(rels_result["relationshipType"].tolist())
                 except:
                     st.info("Schema information not available")
 
@@ -591,7 +605,7 @@ def main():
                             st.dataframe(df, use_container_width=True)
                         except:
                             # Fallback to JSON display
-                            st.json(result)
+                            st.json(result.to_dict('records'))
                     else:
                         st.info("Query executed successfully but returned no results.")
 
