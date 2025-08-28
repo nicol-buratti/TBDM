@@ -1,7 +1,9 @@
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import collect_list, size
-
+import os
 from functionalities.utils import create_graph
+
+NEO4J_URI = os.getenv("NEO4J_URI")
 
 
 def get_spark_df_communities(
@@ -10,6 +12,10 @@ def get_spark_df_communities(
     create_graph(spark, graph_name)
     community_df = (
         spark.read.format("org.neo4j.spark.DataSource")
+        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
+        .option("authentication.type", "basic")
+        .option("authentication.basic.username", "neo4j")
+        .option("authentication.basic.password", "password")
         .option("gds", f"gds.{community_algorithm}.stream")
         .option("gds.graphName", graph_name)
         .option("gds.configuration.maxIterations", "1000")  # Max num of iterations
