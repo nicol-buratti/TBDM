@@ -1,9 +1,6 @@
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import collect_list, size
-import os
 from functionalities.utils import create_graph
-
-NEO4J_URI = os.getenv("NEO4J_URI")
 
 
 def get_spark_df_communities(

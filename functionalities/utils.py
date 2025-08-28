@@ -1,8 +1,5 @@
 from pyspark.sql import SparkSession
 import logging
-import os
-
-NEO4J_URI = os.getenv("NEO4J_URI")
 
 
 def create_graph(spark: SparkSession, graph_name: str):
