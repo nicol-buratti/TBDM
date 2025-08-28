@@ -5,6 +5,10 @@ from pyspark.sql.functions import explode, col
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 from pathlib import Path
 from datetime import datetime
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
@@ -27,21 +31,29 @@ keyword_param = "name"
 
 schema = StructType(
     [
-        StructField("title", StringType()),
         StructField("volnr", StringType()),
+        StructField("title", StringType()),
         StructField("pubyear", StringType()),
         StructField("volacronym", StringType()),
         StructField("voltitle", StringType()),
         StructField("fulltitle", StringType()),
         StructField("loctime", StringType()),
-        StructField("voleditors", ArrayType(StringType())),
+        StructField(
+            "voleditors", ArrayType(StructType([StructField("name", StringType())]))
+        ),
         StructField(
             "papers",
             ArrayType(
                 StructType(
                     [
-                        StructField("authors", ArrayType(StringType())),
-                        StructField("keywords", ArrayType(StringType())),
+                        StructField(
+                            "authors",
+                            ArrayType(StructType([StructField("name", StringType())])),
+                        ),
+                        StructField(
+                            "keywords",
+                            ArrayType(StructType([StructField("name", StringType())])),
+                        ),
                         StructField("url", StringType()),
                         StructField("title", StringType()),
                         StructField("pages", StringType()),
@@ -73,7 +85,7 @@ def create_contains_relationship(df: DataFrame):
     # Map paper title correctly
     p_param = ",".join(paper_param).replace("title", "paper_title:title")
 
-    print(
+    logging.info(
         f"Creating CONTAINS relationships for {volume_papers.count()} volume-paper pairs..."
     )
 
@@ -105,18 +117,22 @@ def create_contains_relationship(df: DataFrame):
         .save()
     )
 
-    print("✅ CONTAINS relationships created")
+    logging.info("✅ CONTAINS relationships created")
 
 
 def create_editor_relationship(df: DataFrame):
     """Create EDITED relationship from Person to Volume"""
     volume_editor = (
-        df.withColumn("voleditorname", explode("voleditors"))
-        .drop("voleditors", "papers")
-        .dropna(subset=["voleditorname"])
+        df.withColumn("voledit", explode("voleditors"))
+        .select(
+            *volume_param,
+            col("voledit.name").alias("name"),
+        )
+        .drop("voleditors", "papers", "voledit")
+        .dropna(subset=["name"])
     )
 
-    print(
+    logging.info(
         f"Creating EDITED relationships for {volume_editor.count()} editor-volume pairs..."
     )
 
@@ -130,8 +146,8 @@ def create_editor_relationship(df: DataFrame):
         # Overwrite source nodes and assign them a label
         .option("relationship.source.save.mode", "Overwrite")
         .option("relationship.source.labels", ":Person")
-        .option("relationship.source.node.properties", "voleditorname:name")
-        .option("relationship.source.node.keys", "voleditorname:name")
+        .option("relationship.source.node.properties", "name")
+        .option("relationship.source.node.keys", "name")
         .option("relationship.target.save.mode", "Overwrite")
         .option("relationship.target.labels", ":Volume")
         .option("relationship.target.node.properties", ",".join(volume_param))
@@ -140,18 +156,19 @@ def create_editor_relationship(df: DataFrame):
         .save()
     )
 
-    print("✅ EDITED relationships created")
+    logging.info("✅ EDITED relationships created")
 
 
 def create_author_relationship(papers: DataFrame):
     """Create AUTHORED relationship from Person to Paper"""
     papers_authors = (
-        papers.withColumn("authorname", explode("authors"))
+        papers.withColumn("author", explode("authors"))
+        .select(*paper_param, col("author.name").alias("name"))
         .drop("authors", "keywords")
-        .dropna(subset=["authorname"])
+        .dropna(subset=["name"])
     )
 
-    print(
+    logging.info(
         f"Creating AUTHORED relationships for {papers_authors.count()} author-paper pairs..."
     )
 
@@ -165,8 +182,8 @@ def create_author_relationship(papers: DataFrame):
         # Overwrite source nodes and assign them a label
         .option("relationship.source.save.mode", "Overwrite")
         .option("relationship.source.labels", ":Person")
-        .option("relationship.source.node.properties", "authorname:name")
-        .option("relationship.source.node.keys", "authorname:name")
+        .option("relationship.source.node.properties", "name")
+        .option("relationship.source.node.keys", "name")
         .option("relationship.target.save.mode", "Overwrite")
         .option("relationship.target.labels", ":Paper")
         .option("relationship.target.node.properties", ",".join(paper_param))
@@ -175,18 +192,19 @@ def create_author_relationship(papers: DataFrame):
         .save()
     )
 
-    print("✅ AUTHORED relationships created")
+    logging.info("✅ AUTHORED relationships created")
 
 
 def create_keyword_relationship(papers: DataFrame):
     """Create HAS_KEYWORD relationship from Paper to Keyword"""
     papers_keywords = (
         papers.withColumn("keyword", explode("keywords"))
+        .select(*paper_param, col("keyword.name").alias("name"))
         .drop("authors", "keywords")
-        .dropna(subset=["keyword"])
+        .dropna(subset=["name"])
     )
 
-    print(
+    logging.info(
         f"Creating HAS_KEYWORD relationships for {papers_keywords.count()} paper-keyword pairs..."
     )
 
@@ -208,9 +226,9 @@ def create_keyword_relationship(papers: DataFrame):
         .option("relationship.target.save.mode", "Overwrite")
         .option("relationship.target.labels", ":Keyword")
         # Map the DataFrame columns to node properties
-        .option("relationship.target.node.properties", "keyword:name")
+        .option("relationship.target.node.properties", "name")
         # Node keys are mandatory for overwrite save mode
-        .option("relationship.target.node.keys", "keyword:name")
+        .option("relationship.target.node.keys", "name")
         # Map the DataFrame columns to relationship properties
         .option("relationship.properties", "")
         .save()
@@ -219,14 +237,14 @@ def create_keyword_relationship(papers: DataFrame):
 
 def volume_relationships(df: DataFrame):
     """Create all volume-related relationships"""
-    print("🔗 Creating volume relationships...")
+    logging.info("🔗 Creating volume relationships...")
     create_contains_relationship(df)
     create_editor_relationship(df)
 
 
 def papers_relationships(df: DataFrame):
     """Create all paper-related relationships"""
-    print("🔗 Creating paper relationships...")
+    logging.info("🔗 Creating paper relationships...")
 
     papers = df.withColumn("paper", explode("papers")).select(
         col("paper.authors").alias("authors"),
@@ -254,8 +272,8 @@ def main(spark: SparkSession, volumes_to_inject):
 
 
 if __name__ == "__main__":
-    print(f"🔗 Neo4j Data Injection Script time:{datetime.now()}")
-    print("=" * 50)
+    logging.info(f"🔗 Neo4j Data Injection Script time:{datetime.now()}")
+    logging.info("=" * 50)
 
     # Create Spark session with Neo4j connector
     spark = (
@@ -272,5 +290,7 @@ if __name__ == "__main__":
     )
 
     main(spark, VOLUMES)
+
+    logging.info("Data injection done")
 
     spark.stop()
