@@ -1,18 +1,11 @@
-from pyspark.sql import SparkSession, DataFrame
-import os
-
-NEO4J_URI = os.getenv("NEO4J_URI")
+from pyspark.sql import SparkSession
 
 
 def link_prediction(
     spark: SparkSession, node: str, id1: int, id2: int, algorithm="commonNeighbors"
-) -> DataFrame:
+) -> float:
     prediction_score = (
         spark.read.format("org.neo4j.spark.DataSource")
-        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-        .option("authentication.type", "basic")
-        .option("authentication.basic.username", "neo4j")
-        .option("authentication.basic.password", "password")
         .option(
             "query",
             f"""

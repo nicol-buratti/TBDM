@@ -12,10 +12,6 @@ def get_spark_df_communities(
     create_graph(spark, graph_name)
     community_df = (
         spark.read.format("org.neo4j.spark.DataSource")
-        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-        .option("authentication.type", "basic")
-        .option("authentication.basic.username", "neo4j")
-        .option("authentication.basic.password", "password")
         .option("gds", f"gds.{community_algorithm}.stream")
         .option("gds.graphName", graph_name)
         .option("gds.configuration.maxIterations", "1000")  # Max num of iterations

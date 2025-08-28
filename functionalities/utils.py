@@ -13,10 +13,6 @@ def create_graph(spark: SparkSession, graph_name: str):
     # Check if graph already exists
     graph_exists = (
         spark.read.format("org.neo4j.spark.DataSource")
-        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-        .option("authentication.type", "basic")
-        .option("authentication.basic.username", "neo4j")
-        .option("authentication.basic.password", "password")
         .option("gds", "gds.graph.exists")
         .option("gds.graphName", graph_name)
         .load()
@@ -29,10 +25,6 @@ def create_graph(spark: SparkSession, graph_name: str):
     # Create graph using your existing configuration
     result = (
         spark.read.format("org.neo4j.spark.DataSource")
-        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-        .option("authentication.type", "basic")
-        .option("authentication.basic.username", "neo4j")
-        .option("authentication.basic.password", "password")
         .option("gds", "gds.graph.project")
         .option("gds.graphName", graph_name)
         .option("gds.nodeProjection", ["Keyword", "Paper", "Volume"])
@@ -51,47 +43,6 @@ def create_graph(spark: SparkSession, graph_name: str):
     logging.info(f"Graph '{graph_name}' created successfully")
     return result
 
-    # except Exception as e:
-    #     logging.error(f"Error creating graph '{graph_name}': {str(e)}")
-
-    #     # Try to drop existing graph and recreate if there's a conflict
-    #     try:
-    #         logging.info(f"Attempting to drop and recreate graph '{graph_name}'")
-    #         spark.read.format("org.neo4j.spark.DataSource").option(
-    #             "gds", "gds.graph.drop"
-    #         ).option("gds.graphName", graph_name).load()
-
-    #         # Recreate the graph
-    #         result = (
-    #             spark.read.format("org.neo4j.spark.DataSource")
-    #             .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-    #             .option("authentication.type", "basic")
-    #             .option("authentication.basic.username", "neo4j")
-    #             .option("authentication.basic.password", "password")
-    #             .option("gds", "gds.graph.project")
-    #             .option("gds.graphName", graph_name)
-    #             .option("gds.nodeProjection", ["Keyword", "Paper", "Volume"])
-    #             .option(
-    #                 "gds.relationshipProjection",
-    #                 """
-    #             {
-    #             "HAS_KEYWORD": {"orientation": "UNDIRECTED"},
-    #             "CONTAINS": {"orientation": "UNDIRECTED"}
-    #             }
-    #             """,
-    #             )
-    #             .load()
-    #         )
-
-    #         logging.info(f"Graph '{graph_name}' recreated successfully")
-    #         return result
-
-    #     except Exception as recreate_error:
-    #         logging.error(
-    #             f"Failed to recreate graph '{graph_name}': {str(recreate_error)}"
-    #         )
-    #         raise recreate_error
-
 
 def get_available_node_types(spark: SparkSession):
     """
@@ -100,10 +51,6 @@ def get_available_node_types(spark: SparkSession):
     try:
         result = (
             spark.read.format("org.neo4j.spark.DataSource")
-            .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-            .option("authentication.type", "basic")
-            .option("authentication.basic.username", "neo4j")
-            .option("authentication.basic.password", "password")
             .option("query", "CALL db.labels()")
             .option("partitions", "1")
             .load()
@@ -124,10 +71,6 @@ def get_available_relationship_types(spark: SparkSession):
     try:
         result = (
             spark.read.format("org.neo4j.spark.DataSource")
-            .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-            .option("authentication.type", "basic")
-            .option("authentication.basic.username", "neo4j")
-            .option("authentication.basic.password", "password")
             .option("query", "CALL db.relationshipTypes()")
             .option("partitions", "1")
             .load()

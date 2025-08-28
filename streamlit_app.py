@@ -19,50 +19,19 @@ logger = logging.getLogger(__name__)
 
 NEO4J_URI = os.getenv("NEO4J_URI")
 
-
-# # Page configuration
-# st.set_page_config(
-#     page_title="Research Paper Network Explorer",
-#     page_icon="📚",
-#     layout="wide",
-#     initial_sidebar_state="expanded",
-# )
-
-# # Custom CSS for better styling
-# st.markdown(
-#     """
-# <style>
-#     .main-header {
-#         font-size: 3rem;
-#         color: #1f77b4;
-#         text-align: center;
-#         margin-bottom: 2rem;
-#     }
-#     .metric-card {
-#         background-color: #f0f2f6;
-#         padding: 1rem;
-#         border-radius: 0.5rem;
-#         margin: 0.5rem 0;
-#     }
-#     .stTabs [data-baseweb="tab-list"] {
-#         gap: 2px;
-#     }
-#     .stTabs [data-baseweb="tab"] {
-#         height: 50px;
-#         padding-left: 20px;
-#         padding-right: 20px;
-#     }
-# </style>
-# """,
-#     unsafe_allow_html=True,
-# )
-
-spark = (
-    SparkSession.builder.appName("StreamlitApp")
-    .master("spark://spark:7077")
-    .config("spark.jars.packages", "neo4j-contrib:neo4j-spark-connector:5.3.1-s_2.12")
-    .getOrCreate()
-)
+if "spark" not in st.session_state:
+    st.session_state.spark = (
+        SparkSession.builder.appName("StreamlitApp")
+        .master("spark://spark:7077")
+        .config(
+            "spark.jars.packages", "neo4j-contrib:neo4j-spark-connector:5.3.1-s_2.12"
+        )
+        .config("neo4j.url", NEO4J_URI)
+        .config("neo4j.authentication.basic.username", "neo4j")
+        .config("neo4j.authentication.basic.password", "password")
+        .config("neo4j.database", "neo4j")
+        .getOrCreate()
+    )
 
 
 def execute_spark_query(query: str, parameters: dict = None) -> pd.DataFrame:
@@ -77,15 +46,12 @@ def execute_spark_query(query: str, parameters: dict = None) -> pd.DataFrame:
                 query = query.replace(placeholder, "null")
             else:
                 query = query.replace(placeholder, str(value))
-    
-    df = (spark.read
-        .format("org.neo4j.spark.DataSource")
-        .option("url", NEO4J_URI if NEO4J_URI else "bolt://neo4j:7687")
-        .option("authentication.type", "basic")
-        .option("authentication.basic.username", "neo4j")
-        .option("authentication.basic.password", "password")
+
+    df = (
+        st.session_state.spark.read.format("org.neo4j.spark.DataSource")
         .option("query", query)
-        .load())
+        .load()
+    )
     return df.toPandas()
 
 
@@ -573,11 +539,15 @@ def main():
                 try:
                     schema_result = execute_spark_query(schema_query)
                     if not schema_result.empty:
-                        st.json(schema_result.to_dict('records'))
+                        st.json(schema_result.to_dict("records"))
                     else:
                         # Fallback schema query
-                        labels_result = execute_spark_query("CALL db.labels() YIELD label RETURN label")
-                        rels_result = execute_spark_query("CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType")
+                        labels_result = execute_spark_query(
+                            "CALL db.labels() YIELD label RETURN label"
+                        )
+                        rels_result = execute_spark_query(
+                            "CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType"
+                        )
 
                         st.write("**Node Labels:**")
                         if not labels_result.empty:
@@ -586,7 +556,7 @@ def main():
                         st.write("**Relationship Types:**")
                         if not rels_result.empty:
                             st.write(rels_result["relationshipType"].tolist())
-                except:
+                except Exception as _:
                     st.info("Schema information not available")
 
         if execute_btn and query.strip():
@@ -603,9 +573,9 @@ def main():
                         try:
                             df = pd.DataFrame(result)
                             st.dataframe(df, use_container_width=True)
-                        except:
+                        except Exception as _:
                             # Fallback to JSON display
-                            st.json(result.to_dict('records'))
+                            st.json(result.to_dict("records"))
                     else:
                         st.info("Query executed successfully but returned no results.")
 
