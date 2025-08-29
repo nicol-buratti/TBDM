@@ -7,8 +7,8 @@ import logging
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
-import random
 
+from functionalities.link_prediction import bulk_link_prediction, link_prediction
 from functionalities.similarity import similarity
 from functionalities.community_detection import get_spark_df_communities
 
@@ -39,7 +39,8 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:password@localhost:7687")
 SPARK_MASTER_URL = os.getenv("SPARK_MASTER_URL", "local[*]")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
-NODE_ID = 344
+NODE_ID = 4826
+LINK_PREDICTION_THRESHOLD = 1
 
 if "spark" not in st.session_state:
     st.session_state.spark = _initialize_spark()
@@ -100,6 +101,11 @@ def get_data_overview():
 
 
 @st.cache_data
+def get_link_prediction(id1, id2):
+    return link_prediction(st.session_state.spark, "Person", id1, id2)
+
+
+@st.cache_data
 def get_community():
     return get_spark_df_communities(
         st.session_state.spark, "louvain", "graph"
@@ -108,7 +114,11 @@ def get_community():
 
 @st.cache_data
 def get_similarity():
-    return similarity(st.session_state.spark, "graphNoPerson", "Paper").toPandas()
+    return (
+        similarity(st.session_state.spark, "graphNoPerson", "Paper")
+        .limit(50)  # for performance issues
+        .toPandas()
+    )
 
 
 def sidebar():
@@ -338,6 +348,10 @@ def tab4_overlay():
         EdgeStyle("CONTAINS", caption="label", directed=False),
         EdgeStyle("EDITED", caption="label", directed=False),
         EdgeStyle("HAS_KEYWORD", caption="label", directed=False),
+        EdgeStyle(
+            label="POSSIBLY_RELATED", color="#ff0000", caption="label", directed=False
+        ),
+        EdgeStyle(label="SIMILAR", color="#0000ff", caption="label", directed=False),
     ]
     query = f"""
         MATCH (n)-[r]-(m)
@@ -351,32 +365,67 @@ def tab4_overlay():
 
     # Render the component
     st.markdown("## Example")
-    # st.dataframe(df)
     st_link_analysis(elements, "cose", node_styles, edge_styles)
 
-    df = get_community_detection_df(NODE_ID)
-    df.to_csv("bho.csv")
-    # st.dataframe(df)
-    elements = transform_df_to_graph_elements(df)
-    st.markdown("## Community")
-    json.dump(elements, open("community.json", "w"))
-    st_link_analysis(elements, "cose", node_styles, edge_styles)
+    community_elements = display_community(node_styles, edge_styles)
 
+    display_link_prediction(node_styles, edge_styles, community_elements)
+
+    st.markdown("## Similarity")
     edges = []
     df_similarity = get_similarity()
+    maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
     for index, row in df_similarity.iterrows():
+        maxx += 1
         edge = {}
-        edge["id"] = random.randint(1, 10000)
+        edge["id"] = maxx
         edge["label"] = "SIMILAR"
         edge["source"] = row["node1"]
         edge["target"] = row["node2"]
 
         edges.append({"data": edge})
-    elements["edges"].extend(edges)
-    st_link_analysis(elements, "cose", node_styles, edge_styles)
+    community_elements["edges"].extend(edges)
+    st_link_analysis(community_elements, "cose", node_styles, edge_styles)
 
 
-def get_community_detection_df(node_id):
+def display_community(node_styles, edge_styles):
+    df_community = get_community_detection_df_graph(NODE_ID)
+    community_elements = transform_df_to_graph_elements(df_community)
+    st.markdown("## Community")
+    st_link_analysis(community_elements, "cose", node_styles, edge_styles)
+    return community_elements
+
+
+def display_link_prediction(node_styles, edge_styles, community_elements):
+    s = list(
+        {
+            e["data"]["id"]
+            for e in community_elements["nodes"]
+            if e["data"]["label"] == "Person"
+        }
+    )
+
+    predictions = bulk_link_prediction(st.session_state.spark, "Person", s)
+    predictions = predictions.where(predictions["score"] > LINK_PREDICTION_THRESHOLD)
+
+    maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
+    for p in predictions.collect():
+        if p["p1"]["<id>"] != p["p2"]["<id>"] and p["p1"]["<id>"] > p["p2"]["<id>"]:
+            maxx += 1
+            edge = {}
+            edge["id"] = maxx
+            edge["label"] = "POSSIBLY_RELATED"
+            edge["source"] = p["p1"]["<id>"]
+            edge["target"] = p["p2"]["<id>"]
+            edge["target"] = p["p2"]["<id>"]
+            community_elements["edges"].append({"data": edge})
+    st.markdown("## Link Prediction")
+    st_link_analysis(
+        community_elements, "cose", node_styles, edge_styles, key="POSSIBLY_RELATED"
+    )
+
+
+def get_community_detection_df_graph(node_id):
     df_community = get_community()
     if isinstance(df_community, pd.DataFrame):
         df_community = st.session_state.spark.createDataFrame(df_community)
@@ -460,7 +509,7 @@ with tab4:
     tab4_overlay()
 
 
-"""
+a = """
 call gds.graph.project("graph",["Keyword", "Paper", "Volume", "Person"],{
         HAS_KEYWORD: {orientation: "UNDIRECTED"},
         CONTAINS: {orientation: "UNDIRECTED"},
