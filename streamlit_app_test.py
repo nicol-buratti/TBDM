@@ -1,12 +1,16 @@
+import json
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from pyvis.network import Network
-import tempfile
 import os
 import logging
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
+import random
+
+from functionalities.similarity import similarity
+from functionalities.community_detection import get_spark_df_communities
 
 
 # Configure logging
@@ -35,6 +39,7 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:password@localhost:7687")
 SPARK_MASTER_URL = os.getenv("SPARK_MASTER_URL", "local[*]")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+NODE_ID = 344
 
 if "spark" not in st.session_state:
     st.session_state.spark = _initialize_spark()
@@ -92,6 +97,18 @@ def get_data_overview():
             overview[key] = 0
 
     return overview
+
+
+@st.cache_data
+def get_community():
+    return get_spark_df_communities(
+        st.session_state.spark, "louvain", "graph"
+    ).toPandas()
+
+
+@st.cache_data
+def get_similarity():
+    return similarity(st.session_state.spark, "graphNoPerson", "Paper").toPandas()
 
 
 def sidebar():
@@ -182,19 +199,15 @@ def tab1_overlay():
 
     year_data = execute_spark_query(year_query)
 
-    if not year_data.empty:
-        df_years = pd.DataFrame(year_data)
-        fig_years = px.line(
+    if year_data.empty:
+        st.info("No year data available for papers.")
+    else:
+        df_years = year_data
+        st.line_chart(
             df_years,
             x="year",
             y="count",
-            title="Papers Published by Year",
-            markers=True,
         )
-        fig_years.update_layout(height=400)
-        st.plotly_chart(fig_years, use_container_width=True)
-    else:
-        st.info("No year data available for papers.")
 
 
 def tab2_overlay():
@@ -311,6 +324,118 @@ def tab3_overlay():
         st.dataframe(df_editors, use_container_width=True)
 
 
+def tab4_overlay():
+    # Style node & edge groups
+    node_styles = [
+        NodeStyle("Volume", "#0E12F3", "volnr", "description"),
+        NodeStyle("Paper", "#04D10E", "title", "description"),
+        NodeStyle("Person", "#0EEDF9", "name", "person"),
+        NodeStyle("Keyword", "#FF7F3E", "name", "key"),
+    ]
+
+    edge_styles = [
+        EdgeStyle("AUTHORED", caption="label", directed=False),
+        EdgeStyle("CONTAINS", caption="label", directed=False),
+        EdgeStyle("EDITED", caption="label", directed=False),
+        EdgeStyle("HAS_KEYWORD", caption="label", directed=False),
+    ]
+    query = f"""
+        MATCH (n)-[r]-(m)
+        WHERE id(n) = {NODE_ID}
+        RETURN n, r, m
+        """
+    df = execute_spark_query(query).head(50)
+    df = st.session_state.spark.createDataFrame(df)
+
+    elements = transform_df_to_graph_elements(df)
+
+    # Render the component
+    st.markdown("## Example")
+    # st.dataframe(df)
+    st_link_analysis(elements, "cose", node_styles, edge_styles)
+
+    df = get_community_detection_df(NODE_ID)
+    df.to_csv("bho.csv")
+    # st.dataframe(df)
+    elements = transform_df_to_graph_elements(df)
+    st.markdown("## Community")
+    json.dump(elements, open("community.json", "w"))
+    st_link_analysis(elements, "cose", node_styles, edge_styles)
+
+    edges = []
+    df_similarity = get_similarity()
+    for index, row in df_similarity.iterrows():
+        edge = {}
+        edge["id"] = random.randint(1, 10000)
+        edge["label"] = "SIMILAR"
+        edge["source"] = row["node1"]
+        edge["target"] = row["node2"]
+
+        edges.append({"data": edge})
+    elements["edges"].extend(edges)
+    st_link_analysis(elements, "cose", node_styles, edge_styles)
+
+
+def get_community_detection_df(node_id):
+    df_community = get_community()
+    if isinstance(df_community, pd.DataFrame):
+        df_community = st.session_state.spark.createDataFrame(df_community)
+
+    comm = 0
+    node_ids_list = [
+        row.nodeIds for row in df_community.select("nodeIds").collect()
+    ]  # extract as list
+
+    for i, n in enumerate(node_ids_list):
+        if node_id in n:
+            comm = i
+            break
+
+    query = f"""
+    WITH {node_ids_list[comm]} AS ids
+    MATCH (n)-[r]->(m)
+    WHERE id(n) IN ids AND id(m) IN ids
+    RETURN n, r, m
+    """
+    df_community = execute_spark_query(query)
+    return df_community
+
+
+def transform_df_to_graph_elements(df):
+    if isinstance(df, pd.DataFrame):
+        df = st.session_state.spark.createDataFrame(df)
+
+    elements = [row.asDict() for row in df.collect()]
+    edges = []
+    nodes = []
+
+    for e in elements:
+        node = e["n"].asDict()
+        node["id"] = node.pop("<id>")
+        node["label"] = node.pop("<labels>")[0]
+        nodes.append({"data": node})
+
+        node = e["m"].asDict()
+        node["id"] = node.pop("<id>")
+        node["label"] = node.pop("<labels>")[0]
+        nodes.append({"data": node})
+
+        edge = e["r"].asDict()
+        edge["id"] = edge.pop("<rel.id>")
+        edge["label"] = edge.pop("<rel.type>")
+        edge["source"] = edge.pop("<source.id>")
+        edge["target"] = edge.pop("<target.id>")
+
+        edges.append({"data": edge})
+
+    elements = {
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+    return elements
+
+
 # Header
 st.title("📚 Research Paper Network Explorer")
 
@@ -318,8 +443,8 @@ st.title("📚 Research Paper Network Explorer")
 sidebar()
 
 # # Main content tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["🏠 Dashboard", "📄 Papers", "👥 People", "🌐 Networks", "🔍 Query"]
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["🏠 Dashboard", "📄 Papers", "👥 People", "🌐 Networks"]
 )
 
 with tab1:
@@ -330,3 +455,21 @@ with tab2:
 
 with tab3:
     tab3_overlay()
+
+with tab4:
+    tab4_overlay()
+
+
+"""
+call gds.graph.project("graph",["Keyword", "Paper", "Volume", "Person"],{
+        HAS_KEYWORD: {orientation: "UNDIRECTED"},
+        CONTAINS: {orientation: "UNDIRECTED"},
+        AUTHORED: {orientation: "UNDIRECTED"},
+        EDITED: {orientation: "UNDIRECTED"}
+        })
+
+call gds.graph.project("graphNoPerson",["Keyword", "Paper", "Volume"],{
+        HAS_KEYWORD: {orientation: "UNDIRECTED"},
+        CONTAINS: {orientation: "UNDIRECTED"}
+        })
+"""
