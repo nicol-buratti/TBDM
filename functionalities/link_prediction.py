@@ -37,11 +37,4 @@ def bulk_link_prediction(
         .option("partitions", "1")
         .load()
     )
-    print(
-        f"""
-        MATCH (p1:{node}) WHERE id(p1) in {ids}
-        MATCH (p2:{node}) WHERE id(p2) in {ids}
-        RETURN p1, p2, gds.alpha.linkprediction.{algorithm}(p1, p2) AS score
-        """
-    )
     return prediction_score
