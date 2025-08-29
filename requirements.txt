@@ -5,8 +5,5 @@ networkx==3.1
 numpy==1.24.3
 pyspark==3.5.3
 pyvis==0.3.2
-neo4j==5.15.0
-py4j==0.10.9.7
-neomodel==5.2.1
 python-dotenv==1.0.0
-tqdm==4.66.1
+st-link-analysis>=0.4.0
