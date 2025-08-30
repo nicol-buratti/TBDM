@@ -7,8 +7,8 @@
 
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
-ARG PYTHON_VERSION=3.10.12
-FROM python:${PYTHON_VERSION}-slim AS base
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim-bookworm AS base
 
 # Prevents Python from writing pyc files.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -37,11 +37,11 @@ WORKDIR /app
 # into this layer.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
-    python -m pip install -r requirements.txt && \
-    apt-get update && \
-    apt-get install -y openjdk-17-jdk
+    python -m pip install -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk &&  \
+    rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+# ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 # Switch to the non-privileged user to run the application.
 # USER appuser
@@ -52,9 +52,5 @@ COPY . .
 # Expose Streamlit port
 EXPOSE 8501
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
-
 # Command to run Streamlit app - Updated to use streamlit_app.py
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501"]
