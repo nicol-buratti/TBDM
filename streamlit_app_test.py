@@ -9,7 +9,7 @@ from pyspark.sql import functions as F
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
 
 from functionalities.link_prediction import bulk_link_prediction, link_prediction
-from functionalities.similarity import similarity
+from functionalities.similarity import similarity_v2
 from functionalities.community_detection import get_spark_df_communities
 
 
@@ -113,12 +113,8 @@ def get_community():
 
 
 @st.cache_data
-def get_similarity():
-    return (
-        similarity(st.session_state.spark, "graphNoPerson", "Paper")
-        .limit(50)  # for performance issues
-        .toPandas()
-    )
+def get_similarity(_df):
+    return similarity_v2(st.session_state.spark, "graph", _df).toPandas()
 
 
 def sidebar():
@@ -367,21 +363,23 @@ def tab4_overlay():
     st.markdown("## Example")
     st_link_analysis(elements, "cose", node_styles, edge_styles)
 
-    community_elements = display_community(node_styles, edge_styles)
+    df_community, community_elements = display_community(node_styles, edge_styles)
 
     display_link_prediction(node_styles, edge_styles, community_elements)
 
     st.markdown("## Similarity")
+    print(f"{type(df_community)=}")
+    df_similarity = get_similarity(st.session_state.spark.createDataFrame(df_community))
     edges = []
-    df_similarity = get_similarity()
     maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
     for index, row in df_similarity.iterrows():
         maxx += 1
         edge = {}
         edge["id"] = maxx
         edge["label"] = "SIMILAR"
-        edge["source"] = row["node1"]
-        edge["target"] = row["node2"]
+        edge["source"] = row["nodeId1"]
+        edge["target"] = row["nodeId2"]
+        edge["similarity"] = 1.0 - row["features_diff_sum"]
 
         edges.append({"data": edge})
     community_elements["edges"].extend(edges)
@@ -393,7 +391,7 @@ def display_community(node_styles, edge_styles):
     community_elements = transform_df_to_graph_elements(df_community)
     st.markdown("## Community")
     st_link_analysis(community_elements, "cose", node_styles, edge_styles)
-    return community_elements
+    return df_community, community_elements
 
 
 def display_link_prediction(node_styles, edge_styles, community_elements):
