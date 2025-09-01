@@ -13,29 +13,6 @@ The Research Paper Network Explorer is designed to extract, process, and analyze
 - **Interactive Visualization**: Provides a Streamlit-based web interface for exploring the network
 - **Advanced Analytics**: Includes community detection, link prediction, and similarity analysis algorithms
 
-## Requirements
-
-The only prerequisite is a working Docker installation, which includes Docker Compose.
-
-### 1. Check for Docker
-
-Verify your installation by running the following commands in your terminal:
-
-```bash
-# Check Docker Engine version
-docker --version
-
-# Check Docker Compose version
-docker compose version
-```
-
-### 2. Install Docker
-If Docker is not installed, download and install Docker Desktop from the official website:
-
-[Get Docker](https://www.docker.com/products/docker-desktop/?utm_source=chatgpt.com)
-
-Docker Desktop includes Docker Engine, Docker Compose, and other necessary tools.
-
 ## 🛠️ Technologies
 **Neo4j (Graph Database)**  
 Neo4j is a native graph database that stores data as nodes and relationships rather than tables. It's ideal for this project because academic data is inherently graph-structured - papers are written by authors, belong to volumes, and share keywords. Neo4j's Cypher query language makes it easy to traverse these complex relationships.
@@ -62,8 +39,9 @@ The scraper extracts data in multiple stages:
    - Volume information (title, year, location, editors)
    - Paper listings with authors and page numbers
 3. **PDF Processing:** Downloads and analyzes paper PDFs to extract:
-   - Abstracts (text between "abstract" and "keywords/introduction" sections)
-   - Keywords (parsed from the keywords section)
+   - Title
+   - Abstract
+   - Keywords
 4. **JSON Storage:** Saves structured data as JSON files for processing
 
 ## 2. Data Injection  
@@ -82,6 +60,29 @@ The injection module uses PySpark to:
 // TODO
 
 # 📦 Installation & Setup
+## Requirements
+
+The only prerequisite is a working Docker installation, which includes Docker Compose.
+
+### 1. Check for Docker
+
+Verify your installation by running the following commands in your terminal:
+
+```bash
+# Check Docker Engine version
+docker --version
+
+# Check Docker Compose version
+docker compose version
+```
+
+### 2. Install Docker
+If Docker is not installed, download and install Docker Desktop from the official website:
+
+[Get Docker](https://www.docker.com/products/docker-desktop/?utm_source=chatgpt.com)
+
+Docker Desktop includes Docker Engine, Docker Compose, and other necessary tools.
+
 ## Quickstart
   1. **Clone Repository**
   ```bash
@@ -102,12 +103,11 @@ The injection module uses PySpark to:
   ```bash
   docker compose --profile streamlit up
   ```
-Access the application at <u> http://localhost:8501 <u>
+Access the application at [http://localhost:8501](http://localhost:8501)
 
 ### ⚠️ Known Issues
 
-
-- **Frontend Interaction**: The frontend may become unresponsive, requiring a Streamlit reboot to restore interactivity.
+- **Frontend Interaction**: Any interaction on the frontend currently leads to an error, requiring a Streamlit to reboot.
 - **Feature Visualization**: To ensure all features are visible in the app, you must first run the following query in the Neo4j browser:
 ```cypher
 call gds.graph.project("graph",
@@ -122,9 +122,9 @@ call gds.graph.project("graph",
 ```
 
 ## Service ports
-- **Neo4j Browser**: <u> http://localhost:7474 <u>
-- **Spark UI**: <u> http://localhost:8080 <u>
-- **Streamlit App**: <u> http://localhost:8501 <u>
+- **Neo4j Browser**: [http://localhost:7474](http://localhost:7474)
+- **Spark UI**: [http://localhost:8080](http://localhost:8080)
+- **Streamlit App**: [http://localhost:8501](http://localhost:8501)
 
 # Participants
 
