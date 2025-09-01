@@ -19,41 +19,10 @@ services:
       - streamlit
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
-<<<<<<< HEAD
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-=======
-
-  web-scraper:
-    build:
-      context: ./web-scraper
-    volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
-    ports:
-      - 8000:8000
-    profiles:
-      - scraper
-
-  jupyterlab:
-    image: quay.io/jupyter/pyspark-notebook:spark-3.5.3
-    container_name: pyspark-notebook
-    command: start-notebook.py --NotebookApp.token=''
-    restart: always
-    # user: root
-    ports:
-      - 8888:8888
-      - 4040:4040
-    volumes:
-      - shared-workspace:/home/jovyan
-    working_dir: /home/jovyan
-    networks:
-      - spark-net
-    profiles:
-      - injection
->>>>>>> main
 
   spark:
     build:
@@ -107,17 +76,10 @@ services:
     build:
       context: ./web-scraper
     volumes:
-      - ./logs:/app/logs
+      - ./web-scraper/logs:/app/logs
       - ./data:/app/data
     ports:
       - 8000:8000
-    depends_on:
-      neo4j:
-        condition: service_healthy
-    environment:
-      - NEO4J_URI=bolt://neo4j:password@neo4j:7687
-      - NEO4J_USERNAME=neo4j
-      - NEO4J_PASSWORD=password
     profiles:
       - scraper
 
@@ -138,7 +100,7 @@ services:
       - NEO4J_URI=bolt://neo4j:password@neo4j:7687
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASSWORD=password
-      - VOLUMES=5
+      - VOLUMES=5 # Number of volumes to create
     networks:
       - spark-net
     profiles:
