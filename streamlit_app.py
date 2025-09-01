@@ -1,3 +1,4 @@
+from functionalities.utils import create_graph
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -38,8 +39,10 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:password@localhost:7687")
 SPARK_MASTER_URL = os.getenv("SPARK_MASTER_URL", "local[*]")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
-NODE_ID = 4826
-LINK_PREDICTION_THRESHOLD = 1
+LINK_PREDICTION_THRESHOLD = os.getenv("LINK_PREDICTION_THRESHOLD", "1")
+LINK_PREDICTION_THRESHOLD = int(LINK_PREDICTION_THRESHOLD)
+NODE_ID = os.getenv("NEO4J_PASSWORD", "0")
+NODE_ID = int(NODE_ID)
 
 if "spark" not in st.session_state:
     st.session_state.spark = _initialize_spark()
@@ -496,18 +499,3 @@ with tab3:
 
 with tab4:
     tab4_overlay()
-
-
-a = """
-call gds.graph.project("graph",["Keyword", "Paper", "Volume", "Person"],{
-        HAS_KEYWORD: {orientation: "UNDIRECTED"},
-        CONTAINS: {orientation: "UNDIRECTED"},
-        AUTHORED: {orientation: "UNDIRECTED"},
-        EDITED: {orientation: "UNDIRECTED"}
-        })
-
-call gds.graph.project("graphNoPerson",["Keyword", "Paper", "Volume"],{
-        HAS_KEYWORD: {orientation: "UNDIRECTED"},
-        CONTAINS: {orientation: "UNDIRECTED"}
-        })
-"""
