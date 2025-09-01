@@ -40,7 +40,7 @@ NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 LINK_PREDICTION_THRESHOLD = os.getenv("LINK_PREDICTION_THRESHOLD", "1")
 LINK_PREDICTION_THRESHOLD = int(LINK_PREDICTION_THRESHOLD)
-NODE_ID = os.getenv("NEO4J_PASSWORD", "0")
+NODE_ID = os.getenv("NEO4J_PASSWORD", "-1")
 NODE_ID = int(NODE_ID)
 
 if "spark" not in st.session_state:
@@ -475,6 +475,11 @@ def transform_df_to_graph_elements(df):
 
     return elements
 
+
+if NODE_ID == -1:
+    query = """MATCH (n:Paper) RETURN n LIMIT 1"""
+    execute_spark_query(query)
+    execute_spark_query(query)
 
 # Header
 st.title("📚 Research Paper Network Explorer")
