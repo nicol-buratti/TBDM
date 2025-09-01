@@ -19,10 +19,41 @@ services:
       - streamlit
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
+<<<<<<< HEAD
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
+=======
+
+  web-scraper:
+    build:
+      context: ./web-scraper
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    ports:
+      - 8000:8000
+    profiles:
+      - scraper
+
+  jupyterlab:
+    image: quay.io/jupyter/pyspark-notebook:spark-3.5.3
+    container_name: pyspark-notebook
+    command: start-notebook.py --NotebookApp.token=''
+    restart: always
+    # user: root
+    ports:
+      - 8888:8888
+      - 4040:4040
+    volumes:
+      - shared-workspace:/home/jovyan
+    working_dir: /home/jovyan
+    networks:
+      - spark-net
+    profiles:
+      - injection
+>>>>>>> main
 
   spark:
     build:

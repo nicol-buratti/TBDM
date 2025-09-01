@@ -1,40 +1,21 @@
-from neomodel import (
-    StructuredNode,
-    StringProperty,
-    RelationshipTo,
-)
-
+from typing import List
 from models.paper import Paper
 from models.people import Person
+from dataclasses import dataclass, field
 
 
-class Volume(StructuredNode):
-    title = StringProperty()
-    volnr = StringProperty()
-    urn = StringProperty()
-    pubyear = StringProperty()
-    volacronym = StringProperty()
-    voltitle = StringProperty()
-    fulltitle = StringProperty()
-    loctime = StringProperty()
-    voleditors = RelationshipTo(Person, "EDITOR")
-    papers = RelationshipTo(Paper, "CONTAINS")
-
-    def to_dict(self):
-        papers = [paper.to_dict() for paper in self.papers]
-
-        return {
-            "title": self.title,
-            "volnr": self.volnr,
-            "urn": self.urn,
-            "pubyear": self.pubyear,
-            "volacronym": self.volacronym,
-            "voltitle": self.voltitle,
-            "fulltitle": self.fulltitle,
-            "loctime": self.loctime,
-            "voleditors": self.voleditors,
-            "papers": papers,
-        }
+@dataclass
+class Volume:
+    title: str
+    volnr: str
+    urn: str
+    pubyear: str
+    volacronym: str
+    voltitle: str
+    fulltitle: str
+    loctime: str
+    voleditors: List[Person] = field(default_factory=list)
+    papers: List[Paper] = field(default_factory=list)
 
     def __str__(self):
         editor_names = [editor.name for editor in self.voleditors]
@@ -44,3 +25,9 @@ class Volume(StructuredNode):
         papers_str = ", ".join(paper_titles) if paper_titles else "No papers"
 
         return f"Volume: {self.title} (Volume Number: {self.volnr}, Editor(s): {editor_str}, Papers: {papers_str})"
+
+    def to_dict(self):
+        dic = self.__dict__
+        dic["voleditors"] = [p.__dict__ for p in self.voleditors]
+        dic["papers"] = [p.to_dict() for p in self.papers]
+        return dic
