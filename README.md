@@ -14,12 +14,10 @@ The Research Paper Network Explorer is designed to extract, process, and analyze
 - **Advanced Analytics**: Includes community detection, link prediction, and similarity analysis algorithms
 
 ## 🛠️ Technologies
-![Neo4j Logo](images/neo4j.png)
 
 **Neo4j (Graph Database)**  
 Neo4j is a native graph database that stores data as nodes and relationships rather than tables. It's ideal for this project because academic data is inherently graph-structured - papers are written by authors, belong to volumes, and share keywords. Neo4j's Cypher query language makes it easy to traverse these complex relationships.
 
-![Spark Logo](images/spark.png)
 **Apache Spark**  
 Apache Spark is a unified analytics engine for large-scale data processing. In this project, Spark:
 
@@ -27,11 +25,9 @@ Apache Spark is a unified analytics engine for large-scale data processing. In t
 - Executes distributed graph algorithms through the Neo4j Spark Connector
 - Processes large volumes of papers efficiently
 
-![docker Logo](images/docker.png)
 **Docker & Docker Compose**  
 Docker ensures consistent environments across different systems by containerizing each component. Docker Compose orchestrates multiple services (Neo4j, Spark, Streamlit) with proper networking and dependencies.
 
-![streamlit Logo](images/streamlit.png)
 **Streamlit (Web Interface)**
 Streamlit is a Python framework for creating data applications. It provides an intuitive interface for users to explore the paper network without needing technical expertise.
 
@@ -132,6 +128,7 @@ Access the application at [http://localhost:8501](http://localhost:8501)
 ### ⚠️ Known Issues
 
 - **Frontend Interaction**: Any interaction on the frontend currently leads to an error, requiring a Streamlit to reboot.
+- **Graph Visualization**: Interactions currently cause errors. To view the graph for a specific paper, set the paper's ID directly in `docker-compose.yml`.
 - **Feature Visualization**: To ensure all features are visible in the app, you must first run the following query in the Neo4j browser:
 ```cypher
 call gds.graph.project("graph",
