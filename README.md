@@ -88,18 +88,19 @@ Docker Desktop includes Docker Engine, Docker Compose, and other necessary tools
   ```bash
   git clone https://github.com/nicol-buratti/TBDM.git
   ```
+  2. **Edit `docker-compose.yml` and update the environment variables for the services**
 
- 2. **Run the web scraper**
+  3. **Run the web scraper**
   ```bash
   docker compose --profile scraper up
   ```
 
- 3. **Inject the data into Neo4j**
+  4. **Inject the data into Neo4j**
   ```bash
   docker compose --profile injection up
   ```
 
- 4. **Run the frontend**
+  5. **Run the frontend**
   ```bash
   docker compose --profile streamlit up
   ```
@@ -125,6 +126,13 @@ call gds.graph.project("graph",
 - **Neo4j Browser**: [http://localhost:7474](http://localhost:7474)
 - **Spark UI**: [http://localhost:8080](http://localhost:8080)
 - **Streamlit App**: [http://localhost:8501](http://localhost:8501)
+
+# Future Roadmap
+
+- Improve frontend UX, responsiveness and interaction stability
+- Improve web scraper capabilities for pdf
+- Expand analytics (citation analysis, temporal dynamics)
+- Integrate additional data sources beyond CEUR-WS
 
 # Participants
 
