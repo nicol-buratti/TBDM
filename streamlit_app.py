@@ -1,4 +1,3 @@
-from functionalities.utils import create_graph
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -8,7 +7,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
 
-from functionalities.link_prediction import bulk_link_prediction, link_prediction
+from functionalities.link_prediction import bulk_link_prediction
 from functionalities.similarity import similarity
 from functionalities.community_detection import get_spark_df_communities
 
