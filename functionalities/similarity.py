@@ -41,7 +41,9 @@ def similarity(
         .where(col("a.nodeId") < col("b.nodeId"))
         .withColumn(
             "features_diff",
-            expr("transform(arrays_zip(f1_arr, f2_arr), x -> x.f1_arr - x.f2_arr)"),
+            expr(
+                "transform(arrays_zip(f1_arr, f2_arr), x -> sqrt(pow(x.f1_arr - x.f2_arr, 2)))"
+            ),
         )
         .withColumn(
             "features_diff_sum",
