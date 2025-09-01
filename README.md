@@ -14,9 +14,12 @@ The Research Paper Network Explorer is designed to extract, process, and analyze
 - **Advanced Analytics**: Includes community detection, link prediction, and similarity analysis algorithms
 
 ## 🛠️ Technologies
+![Neo4j Logo](images/neo4j.png)
+
 **Neo4j (Graph Database)**  
 Neo4j is a native graph database that stores data as nodes and relationships rather than tables. It's ideal for this project because academic data is inherently graph-structured - papers are written by authors, belong to volumes, and share keywords. Neo4j's Cypher query language makes it easy to traverse these complex relationships.
 
+![Spark Logo](images/spark.png)
 **Apache Spark**  
 Apache Spark is a unified analytics engine for large-scale data processing. In this project, Spark:
 
@@ -24,9 +27,11 @@ Apache Spark is a unified analytics engine for large-scale data processing. In t
 - Executes distributed graph algorithms through the Neo4j Spark Connector
 - Processes large volumes of papers efficiently
 
+![docker Logo](images/docker.png)
 **Docker & Docker Compose**  
 Docker ensures consistent environments across different systems by containerizing each component. Docker Compose orchestrates multiple services (Neo4j, Spark, Streamlit) with proper networking and dependencies.
 
+![streamlit Logo](images/streamlit.png)
 **Streamlit (Web Interface)**
 Streamlit is a Python framework for creating data applications. It provides an intuitive interface for users to explore the paper network without needing technical expertise.
 
@@ -57,7 +62,25 @@ The injection module uses PySpark to:
 
 # 🚀 Functionalities / Core Features
 
-// TODO
+## Community Detection
+Identifies clusters of closely related papers, authors, or keywords within the graph.  
+- Uses graph-based algorithms (e.g., Louvain or Label Propagation) to detect modular structures.  
+- Helps reveal research communities, collaborative groups, and thematic clusters across volumes.  
+
+## Link Prediction
+Predicts potential relationships that are not explicitly present in the current graph.  
+- Utilizes similarity metrics and graph embeddings to suggest:  
+  - Future collaborations between authors  
+  - Related papers based on shared keywords or citations  
+  - Connections between volumes and emerging topics  
+
+## Similarity Analysis
+Quantifies the similarity between nodes in the graph to discover patterns and relationships.  
+- Measures similarity between papers, authors, or keywords using graph-based metrics.  
+- Supports tasks such as:  
+  - Finding papers with overlapping topics  
+  - Identifying authors with similar research focus  
+  - Grouping keywords by semantic or contextual proximity
 
 # 📦 Installation & Setup
 ## Requirements
