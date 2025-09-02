@@ -190,7 +190,6 @@ def tab1_overlay():
     # Recent papers chart
     st.subheader("📈 Papers by Year")
 
-    # Fixed query - Papers get their year from the Volume they belong to
     year_query = """
     MATCH (v:Volume)-[:CONTAINS]->(p:Paper)
     WHERE v.pubyear IS NOT NULL
@@ -208,7 +207,6 @@ def tab1_overlay():
         year_data = year_data.dropna(subset=['year'])
         year_data['year'] = year_data['year'].astype(int)
         
-        # Create a more sophisticated plot using plotly
         fig = px.line(
             year_data,
             x='year',
@@ -227,7 +225,6 @@ def tab1_overlay():
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Additional statistics
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -242,6 +239,111 @@ def tab1_overlay():
             if not year_data.empty:
                 avg_papers_per_year = year_data['count'].mean()
                 st.metric("Avg Papers/Year", f"{avg_papers_per_year:.1f}")
+    
+    # Most common keywords chart
+    st.subheader("🏷️ Most Common Keywords")
+    
+    keywords_query = """
+    MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
+    WITH k.name as keyword, count(p) as paper_count
+    ORDER BY paper_count DESC
+    LIMIT 20
+    RETURN keyword, paper_count
+    """
+    
+    keywords_data = execute_spark_query(keywords_query)
+    
+    if keywords_data.empty:
+        st.info("No keyword data available.")
+    else:
+        # Create horizontal bar chart for better readability of keyword names
+        fig_keywords = px.bar(
+            keywords_data,
+            x='paper_count',
+            y='keyword',
+            orientation='h',
+            title='Top 20 Most Common Keywords in Papers',
+            labels={'paper_count': 'Number of Papers', 'keyword': 'Keyword'},
+            color='paper_count',
+            color_continuous_scale='Blues',
+            text='paper_count'
+        )
+        
+        fig_keywords.update_layout(
+            height=600,
+            xaxis_title="Number of Papers",
+            yaxis_title="Keywords",
+            showlegend=False,
+            yaxis={'categoryorder': 'total ascending'},
+            coloraxis_showscale=False
+        )
+        
+        fig_keywords.update_traces(
+            texttemplate='%{text}',
+            textposition='outside'
+        )
+        
+        st.plotly_chart(fig_keywords, use_container_width=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_keywords_query = """
+            MATCH (k:Keyword)
+            RETURN count(DISTINCT k) as count
+            """
+            total_keywords = execute_spark_query(total_keywords_query)
+            if not total_keywords.empty:
+                st.metric("Total Unique Keywords", total_keywords.iloc[0]['count'])
+        
+        with col2:
+            avg_keywords_query = """
+            MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
+            WITH p, count(k) as keyword_count
+            RETURN avg(keyword_count) as avg_keywords
+            """
+            avg_keywords = execute_spark_query(avg_keywords_query)
+            if not avg_keywords.empty and avg_keywords.iloc[0]['avg_keywords']:
+                st.metric("Avg Keywords per Paper", f"{avg_keywords.iloc[0]['avg_keywords']:.1f}")
+        
+        with col3:
+            if not keywords_data.empty:
+                most_common = keywords_data.iloc[0]
+                st.metric("Most Common Keyword", 
+                         most_common['keyword'], 
+                         f"({most_common['paper_count']} papers)")
+        
+        with st.expander("📊 Keyword Distribution Details"):
+            # Create a treemap for better visualization of keyword distribution
+            fig_treemap = px.treemap(
+                keywords_data.head(30),
+                path=['keyword'],
+                values='paper_count',
+                title='Keyword Distribution (Top 30)',
+                color='paper_count',
+                color_continuous_scale='Viridis',
+                hover_data={'paper_count': True}
+            )
+            
+            fig_treemap.update_layout(height=500)
+            st.plotly_chart(fig_treemap, use_container_width=True)
+            
+            # Show full keyword table
+            st.subheader("All Keywords Table")
+            all_keywords_query = """
+            MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
+            WITH k.name as keyword, count(p) as paper_count
+            ORDER BY paper_count DESC
+            RETURN keyword, paper_count
+            """
+            all_keywords_data = execute_spark_query(all_keywords_query)
+            
+            if not all_keywords_data.empty:
+                st.dataframe(
+                    all_keywords_data,
+                    use_container_width=True,
+                    height=400
+                )
 
 
 def tab2_overlay():
