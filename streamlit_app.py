@@ -40,8 +40,7 @@ NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 LINK_PREDICTION_THRESHOLD = os.getenv("LINK_PREDICTION_THRESHOLD", "1")
 LINK_PREDICTION_THRESHOLD = int(LINK_PREDICTION_THRESHOLD)
-NODE_ID = os.getenv("NEO4J_PASSWORD", "-1")
-NODE_ID = int(NODE_ID)
+NODE_ID = 230
 
 if "spark" not in st.session_state:
     st.session_state.spark = _initialize_spark()
@@ -187,13 +186,15 @@ def tab1_overlay():
             f"{avg_papers_per_volume:.1f}",
             help="Average number of papers per volume",
         )
-        # Recent papers chart
+    
+    # Recent papers chart
     st.subheader("📈 Papers by Year")
 
+    # Fixed query - Papers get their year from the Volume they belong to
     year_query = """
-    MATCH (p:Paper)
-    WHERE p.year IS NOT NULL
-    RETURN p.year as year, count(p) as count
+    MATCH (v:Volume)-[:CONTAINS]->(p:Paper)
+    WHERE v.pubyear IS NOT NULL
+    RETURN v.pubyear as year, count(p) as count
     ORDER BY year
     """
 
@@ -202,12 +203,45 @@ def tab1_overlay():
     if year_data.empty:
         st.info("No year data available for papers.")
     else:
-        df_years = year_data
-        st.line_chart(
-            df_years,
-            x="year",
-            y="count",
+        # Convert year to integer if it's a string
+        year_data['year'] = pd.to_numeric(year_data['year'], errors='coerce')
+        year_data = year_data.dropna(subset=['year'])
+        year_data['year'] = year_data['year'].astype(int)
+        
+        # Create a more sophisticated plot using plotly
+        fig = px.line(
+            year_data,
+            x='year',
+            y='count',
+            title='Number of Papers Published by Year',
+            labels={'year': 'Year', 'count': 'Number of Papers'},
+            markers=True
         )
+        
+        fig.update_layout(
+            xaxis_title="Year",
+            yaxis_title="Number of Papers",
+            hovermode='x unified',
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Additional statistics
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if not year_data.empty:
+                st.metric("Earliest Year", int(year_data['year'].min()))
+        
+        with col2:
+            if not year_data.empty:
+                st.metric("Latest Year", int(year_data['year'].max()))
+        
+        with col3:
+            if not year_data.empty:
+                avg_papers_per_year = year_data['count'].mean()
+                st.metric("Avg Papers/Year", f"{avg_papers_per_year:.1f}")
 
 
 def tab2_overlay():
