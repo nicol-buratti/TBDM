@@ -15,21 +15,30 @@ The Research Paper Network Explorer is designed to extract, process, and analyze
 
 ## 🛠️ Technologies
 
-**Neo4j (Graph Database)**  
-Neo4j is a native graph database that stores data as nodes and relationships rather than tables. It's ideal for this project because academic data is inherently graph-structured - papers are written by authors, belong to volumes, and share keywords. Neo4j's Cypher query language makes it easy to traverse these complex relationships.
+# **Neo4j (Graph Database)**  
+<img width="500" height="200" alt="Neo4j-logo_color" src="https://github.com/user-attachments/assets/5b5366be-0a08-4bb3-a769-e43e40ca08e9" />
 
-**Apache Spark**  
-Apache Spark is a unified analytics engine for large-scale data processing. In this project, Spark:
+Neo4j is a leading ACID-compliant graph database management system (DBMS) that stores and queries data as nodes and relationships, providing superior performance for highly connected datasets compared to traditional relational databases. It uses the property graph model and is built on a Java-based NoSQL foundation, making it ideal for use cases like recommendation engines, social networks, and knowledge graphs. 
+
+# **Apache Spark**  
+<img width="500" height="200" alt="Apache_Spark_logo svg" src="https://github.com/user-attachments/assets/6e52b02d-77b2-4f3d-8ab8-59b6695bade2" />
+
+Apache Spark is a unified analytics engine for large-scale data processing. It provides high-level APIs in Java, Scala, Python and R, and an optimized engine that supports general execution graphs. It also supports a rich set of higher-level tools including Spark SQL for SQL and structured data processing, pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing, and Structured Streaming for incremental computation and stream processing. 
+In this project, Spark:
 
 - Handles parallel data injection into Neo4j
 - Executes distributed graph algorithms through the Neo4j Spark Connector
 - Processes large volumes of papers efficiently
 
-**Docker & Docker Compose**  
-Docker ensures consistent environments across different systems by containerizing each component. Docker Compose orchestrates multiple services (Neo4j, Spark, Streamlit) with proper networking and dependencies.
+# **Docker & Docker Compose**  
+<img width="500" height="400" alt="docker" src="https://github.com/user-attachments/assets/f0f572e9-7f27-414c-92f6-fb027ef286b3" />
 
-**Streamlit (Web Interface)**
-Streamlit is a Python framework for creating data applications. It provides an intuitive interface for users to explore the paper network without needing technical expertise.
+Docker is an open platform for developing, shipping, and running applications. Docker enables you to separate your applications from your infrastructure so you can deliver software quickly. With Docker, you can manage your infrastructure in the same ways you manage your applications. By taking advantage of Docker's methodologies for shipping, testing, and deploying code, you can significantly reduce the delay between writing code and running it in production.
+
+# **Streamlit (Web Interface)**
+<img width="500" height="250" alt="streamlit" src="https://github.com/user-attachments/assets/fd702ccf-65d8-427e-9841-ad4ecaece7e6" />
+
+Streamlit is an open-source Python framework for data scientists and AI/ML engineers to deliver dynamic data apps with only a few lines of code. Build and deploy powerful data apps in minutes.
 
 ## 📊 Data Pipeline
 ## 1. Web Scraping  
@@ -154,7 +163,7 @@ call gds.graph.project("graph",
 - Expand analytics (citation analysis, temporal dynamics)
 - Integrate additional data sources beyond CEUR-WS
 
-# Participants
+# Contributors
 
 - Nicol Buratti - nicol.buratti@studenti.unicam.it
 - Kevin Concettoni - kevin.concettoni@studenti.unicam.it
