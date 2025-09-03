@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import os
 import logging
+import re
+from collections import Counter
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
@@ -345,69 +347,224 @@ def tab1_overlay():
                     height=400
                 )
 
-
 def tab2_overlay():
     st.header("📄 Papers Explorer")
-
-    # Search and filter
-    col1, col2 = st.columns([3, 1])
-
-    with col1:
-        search_term = st.text_input(
-            "🔍 Search papers by title", placeholder="Enter keywords to search..."
+    
+    # Load all papers data at once
+    papers_query = """
+    MATCH (v:Volume)-[:CONTAINS]->(p:Paper)
+    WHERE v.pubyear IS NOT NULL
+    RETURN DISTINCT
+        p.title as title,
+        p.url as url,
+        p.abstract as abstract,
+        p.pages as pages,
+        v.pubyear as year,
+        v.voltitle as volume_title,
+        v.volnr as volume_id
+    ORDER BY v.pubyear DESC, p.title
+    """
+    
+    try:
+        papers_df = (
+            st.session_state.spark.read.format("org.neo4j.spark.DataSource")
+            .option("query", papers_query)
+            .load()
+            .limit(100)  # Limit to 100 papers for performance
+            .toPandas()
         )
-
-    with col2:
-        limit = st.selectbox("Results limit", [10, 25, 50, 100], index=1)
-
-    # Papers query
-    if search_term:
-        escaped_search = search_term.replace("'", "\\'")
-        papers_query = f"""
-        MATCH (p:Paper)
-        WHERE toLower(p.title) CONTAINS toLower('{escaped_search}')
-        WITH p
-        ORDER BY p.year DESC
-        RETURN p.title as title, p.year as year, p.author as author, p.abstract as abstract
-        """
-    else:
-        papers_query = """
-        MATCH (p:Paper)
-        WITH p
-        ORDER BY p.year DESC
-        RETURN p.title as title, p.year as year, p.author as author, p.abstract as abstract
-        """
-
-    papers_data = execute_spark_query(papers_query).head(limit)
-
-    if not papers_data.empty:
-        st.success(f"Found {len(papers_data)} papers")
-
-        for i, row in papers_data.iterrows():
-            with st.expander(
-                f"📄 {row.get('title', 'Untitled')} ({row.get('year', 'N/A')})"
-            ):
-                col1, col2 = st.columns([2, 1])
-
-                with col1:
-                    if row.get("abstract"):
-                        st.write("**Abstract:**")
-                        st.write(row["abstract"])
-                    else:
-                        st.write("*No abstract available*")
-
-                with col2:
-                    if row.get("author"):
-                        st.write(f"**Author:** {row['author']}")
-                    if row.get("year"):
-                        st.write(f"**Year:** {row['year']}")
-    else:
-        if search_term:
-            st.info(f"No papers found matching '{search_term}'")
+    except Exception as e:
+        st.error(f"Error loading papers: {str(e)}")
+        papers_df = pd.DataFrame()
+        return
+    
+    if papers_df.empty:
+        st.warning("No papers found in the database.")
+        return
+    
+    # Convert year to numeric
+    papers_df['year'] = pd.to_numeric(papers_df['year'], errors='coerce')
+    
+    # Title word analysis
+    st.subheader("📝 Title Word Analysis")
+    
+    # Process titles to extract words
+    import re
+    from collections import Counter
+    
+    # Common stop words to exclude
+    stop_words = {
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'been', 'be',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+        'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these',
+        'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which',
+        'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both',
+        'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same',
+        'so', 'than', 'too', 'very', 'just', 'into', 'over', 'under', 'using',
+        'based', 'through', 'between', 'via', 'within', 'without', 'towards'
+    }
+    
+    # Extract words from titles
+    all_words = []
+    title_word_counts = []
+    for title in papers_df['title'].dropna():
+        words = re.findall(r'\b[a-z]+\b', title.lower())
+        title_word_counts.append(len(words))
+        # Filter out stop words and short words (less than 3 characters)
+        words = [w for w in words if w not in stop_words and len(w) >= 3]
+        all_words.extend(words)
+    
+    papers_df['title_word_count'] = pd.Series(title_word_counts[:len(papers_df)])
+    
+    # Count word frequencies
+    word_counts = Counter(all_words)
+    top_words = word_counts.most_common(25)
+    
+    if top_words:
+        words_df = pd.DataFrame(top_words, columns=['word', 'count'])
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Bar chart
+            fig_words = px.bar(
+                words_df.head(15),
+                x='count',
+                y='word',
+                orientation='h',
+                labels={'count': 'Frequency', 'word': 'Word'},
+                title="Top 15 Most Common Words in Titles",
+                color='count',
+                color_continuous_scale='Teal'
+            )
+            fig_words.update_layout(
+                height=400,
+                yaxis={'categoryorder': 'total ascending'},
+                coloraxis_showscale=False,
+                showlegend=False
+            )
+            st.plotly_chart(fig_words, use_container_width=True)
+        
+        with col2:
+            # Treemap visualization
+            fig_treemap = px.treemap(
+                words_df.head(20),
+                path=['word'],
+                values='count',
+                title="Word Frequency Treemap",
+                color='count',
+                color_continuous_scale='RdYlBu_r',
+                hover_data={'count': True}
+            )
+            fig_treemap.update_layout(
+                height=400,
+                coloraxis_showscale=False
+            )
+            fig_treemap.update_traces(
+                textinfo="label+value",
+                textfont_size=14,
+                marker=dict(cornerradius=5)
+            )
+            st.plotly_chart(fig_treemap, use_container_width=True)
+    
+    st.subheader("📊 Quick Statistics")
+    
+    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+    
+    with stat_col1:
+        total_papers = len(papers_df)
+        st.metric("Papers Shown", total_papers)
+    
+    with stat_col2:
+        if 'title_word_count' in papers_df.columns:
+            avg_title_length = papers_df['title_word_count'].mean()
+            st.metric("Avg Title Length", f"{avg_title_length:.1f} words")
         else:
-            st.info("No papers found in the database.")
+            st.metric("Avg Title Length", "N/A")
+    
+    with stat_col3:
+        if top_words:
+            most_common_word = words_df.iloc[0]['word']
+            word_freq = words_df.iloc[0]['count']
+            st.metric("Most Common Word", f"{most_common_word} ({word_freq}x)")
+        else:
+            st.metric("Most Common Word", "N/A")
+    
+    with stat_col4:
+        unique_volumes = papers_df['volume_title'].nunique()
+        st.metric("Unique Volumes", unique_volumes)
+    
+    # Display sample papers
+    st.subheader("📄 Recent Papers Sample")
+    st.info("Showing a sample of recent papers from the database")
+    
+    # Get the 20 most recent papers
+    recent_papers = papers_df.nlargest(20, 'year')
+    
+    # Display papers
+    for idx, row in recent_papers.iterrows():
+        paper_title = row.get('title', 'Untitled')
+        paper_year = row.get('year', 'N/A')
+        volume_title = row.get('volume_title', 'Unknown Volume')
+        
+        with st.expander(f"📄 {paper_title} ({paper_year})"):
 
-
+            col_left, col_right = st.columns([3, 1])
+            
+            with col_left:
+                st.markdown("**Abstract:**")
+                if row.get('abstract'):
+                    # Truncate abstract
+                    abstract_text = row['abstract']
+                    if len(abstract_text) > 1000:
+                        abstract_text = abstract_text[:1000] + "..."
+                    st.write(abstract_text)
+                else:
+                    st.write("*No abstract available*")
+            
+            with col_right:
+                st.markdown("**Details:**")
+                st.write(f"📅 Year: {paper_year}")
+                st.write(f"📚 Volume: {volume_title}")
+                
+                if row.get('pages'):
+                    st.write(f"📄 Pages: {row['pages']}")
+                
+                if row.get('url'):
+                    st.markdown(f"[🔗 View Paper]({row['url']})")
+    
+    # Volume distribution chart
+    st.subheader("🥧 Papers Distribution Across Volumes")
+    
+    # Get top 15 volumes
+    top_volumes = papers_df['volume_title'].value_counts().head(15)
+    
+    fig_pie = px.pie(
+        values=top_volumes.values,
+        names=top_volumes.index,
+        title="Top 15 Volumes by Paper Count",
+        hole=0.4  # Create a donut chart
+    )
+    
+    fig_pie.update_traces(
+        textposition='inside',
+        textinfo='percent+label'
+    )
+    
+    fig_pie.update_layout(
+        height=500,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.01
+        )
+    )
+    
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
 def tab3_overlay():
     st.header("👥 People Network")
 
