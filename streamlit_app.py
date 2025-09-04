@@ -386,7 +386,7 @@ def tab2_overlay():
     papers_df['year'] = pd.to_numeric(papers_df['year'], errors='coerce')
     
     # Title word analysis
-    st.subheader("📝 Title Word Analysis")
+    st.subheader("🔍 Title Word Analysis")
     
     # Process titles to extract words
     import re
@@ -424,49 +424,24 @@ def tab2_overlay():
     if top_words:
         words_df = pd.DataFrame(top_words, columns=['word', 'count'])
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Bar chart
-            fig_words = px.bar(
-                words_df.head(15),
-                x='count',
-                y='word',
-                orientation='h',
-                labels={'count': 'Frequency', 'word': 'Word'},
-                title="Top 15 Most Common Words in Titles",
-                color='count',
-                color_continuous_scale='Teal'
-            )
-            fig_words.update_layout(
-                height=400,
-                yaxis={'categoryorder': 'total ascending'},
-                coloraxis_showscale=False,
-                showlegend=False
-            )
-            st.plotly_chart(fig_words, use_container_width=True)
-        
-        with col2:
-            # Treemap visualization
-            fig_treemap = px.treemap(
-                words_df.head(20),
-                path=['word'],
-                values='count',
-                title="Word Frequency Treemap",
-                color='count',
-                color_continuous_scale='RdYlBu_r',
-                hover_data={'count': True}
-            )
-            fig_treemap.update_layout(
-                height=400,
-                coloraxis_showscale=False
-            )
-            fig_treemap.update_traces(
-                textinfo="label+value",
-                textfont_size=14,
-                marker=dict(cornerradius=5)
-            )
-            st.plotly_chart(fig_treemap, use_container_width=True)
+        # Single bar chart (removed column layout)
+        fig_words = px.bar(
+            words_df.head(15),
+            x='count',
+            y='word',
+            orientation='h',
+            labels={'count': 'Frequency', 'word': 'Word'},
+            title="Top 15 Most Common Words in Titles",
+            color='count',
+            color_continuous_scale='Teal'
+        )
+        fig_words.update_layout(
+            height=400,
+            yaxis={'categoryorder': 'total ascending'},
+            coloraxis_showscale=False,
+            showlegend=False
+        )
+        st.plotly_chart(fig_words, use_container_width=True)
     
     st.subheader("📊 Quick Statistics")
     
