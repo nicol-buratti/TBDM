@@ -591,7 +591,6 @@ def tab3_overlay():
         df_editors = pd.DataFrame(editors_data)
         st.dataframe(df_editors, use_container_width=True)
 
-
 def tab4_overlay():
     # Style node & edge groups
     node_styles = [
@@ -622,7 +621,7 @@ def tab4_overlay():
     elements = transform_df_to_graph_elements(df)
 
     # Render the component
-    st.markdown("## Example")
+    st.markdown("## Node overview")
     st_link_analysis(elements, "cose", node_styles, edge_styles)
 
     df_community, community_elements = display_community(node_styles, edge_styles)
@@ -652,6 +651,141 @@ def display_community(node_styles, edge_styles):
     community_elements = transform_df_to_graph_elements(df_community)
     st.markdown("## Community")
     st_link_analysis(community_elements, "cose", node_styles, edge_styles)
+    
+    st.markdown("### 📊 Community Analytics")
+    
+    # Get all communities
+    all_communities_df = get_community()
+    
+    if all_communities_df is None or all_communities_df.empty:
+        st.warning("No community data available")
+        return df_community, community_elements
+    
+    # Find which community the current node belongs to
+    current_community_id = None
+    node_ids_list = [row['nodeIds'] for _, row in all_communities_df.iterrows()]
+    for i, nodes in enumerate(node_ids_list):
+        if NODE_ID in nodes:
+            current_community_id = i
+            break
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_communities = len(all_communities_df)
+        st.metric("Total Communities", total_communities)
+    
+    with col2:
+        if current_community_id is not None:
+            current_community_size = all_communities_df.iloc[current_community_id]['item_count']
+            st.metric("Current Community Size", current_community_size)
+        else:
+            st.metric("Current Community Size", "N/A")
+    
+    with col3:
+        avg_community_size = all_communities_df['item_count'].mean()
+        st.metric("Avg Community Size", f"{avg_community_size:.1f}")
+    
+    with col4:
+        largest_community = all_communities_df['item_count'].max()
+        st.metric("Largest Community", largest_community)
+
+    viz_col1, viz_col2 = st.columns(2)
+    
+    with viz_col1:
+        # Community size distribution
+        st.subheader("🔍 Community Size Distribution")
+        fig_dist = px.histogram(
+            all_communities_df.head(20),
+            x='item_count',
+            nbins=20,
+            title="Distribution of Community Sizes (Top 20)",
+            labels={'item_count': 'Number of Nodes', 'count': 'Number of Communities'},
+            color_discrete_sequence=['#1f77b4']
+        )
+        fig_dist.update_layout(
+            height=350,
+            showlegend=False,
+            bargap=0.1
+        )
+        st.plotly_chart(fig_dist, use_container_width=True)
+    
+    with viz_col2:
+        # Top communities
+        st.subheader("🏆 Top 10 Largest Communities")
+        top_communities = all_communities_df.head(10).copy()
+        top_communities['community_label'] = ['Community ' + str(i) for i in range(len(top_communities))]
+        
+        colors = ['#FF7F3E' if i == current_community_id else '#1f77b4' 
+                  for i in range(len(top_communities))]
+        
+        fig_top = px.bar(
+            top_communities,
+            x='community_label',
+            y='item_count',
+            title="Largest Communities by Node Count",
+            labels={'item_count': 'Number of Nodes', 'community_label': 'Community'},
+            color_discrete_sequence=colors
+        )
+        fig_top.update_layout(
+            height=350,
+            showlegend=False,
+            xaxis_tickangle=-45
+        )
+        st.plotly_chart(fig_top, use_container_width=True)
+    
+    # Node type composition in current community
+    if current_community_id is not None and len(community_elements['nodes']) > 0:
+        st.subheader("🎯 Current Community Composition")
+        
+        node_types = {}
+        for node in community_elements['nodes']:
+            node_label = node['data']['label']
+            node_types[node_label] = node_types.get(node_label, 0) + 1
+        
+        comp_col1, comp_col2 = st.columns(2)
+        
+        with comp_col1:
+            # Chart of node types
+            if node_types:
+                fig_pie = px.pie(
+                    values=list(node_types.values()),
+                    names=list(node_types.keys()),
+                    title=f"Node Types in Community {current_community_id}",
+                    color_discrete_map={
+                        'Volume': '#0E12F3',
+                        'Paper': '#04D10E',
+                        'Person': '#0EEDF9',
+                        'Keyword': '#FF7F3E'
+                    }
+                )
+                fig_pie.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label'
+                )
+                fig_pie.update_layout(height=300)
+                st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with comp_col2:
+            # Table of node type counts
+            if node_types:
+                node_types_df = pd.DataFrame(
+                    list(node_types.items()),
+                    columns=['Node Type', 'Count']
+                ).sort_values('Count', ascending=False)
+                
+                st.markdown("**Node Type Breakdown:**")
+                st.dataframe(node_types_df, use_container_width=True, hide_index=True)
+                
+                total_nodes = sum(node_types.values())
+                total_edges = len(community_elements['edges'])
+                density = (2 * total_edges) / (total_nodes * (total_nodes - 1)) if total_nodes > 1 else 0
+                
+                st.markdown("**Community Metrics:**")
+                st.write(f"• **Total Edges:** {total_edges}")
+                st.write(f"• **Graph Density:** {density:.3f}")
+                st.write(f"• **Avg Degree:** {(2 * total_edges / total_nodes):.2f}" if total_nodes > 0 else "N/A")
+    
     return df_community, community_elements
 
 
@@ -742,7 +876,6 @@ def transform_df_to_graph_elements(df):
     }
 
     return elements
-
 
 if NODE_ID == -1:
     query = """MATCH (n:Paper) RETURN n LIMIT 1"""
