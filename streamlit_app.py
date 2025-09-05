@@ -4,6 +4,7 @@ import plotly.express as px
 import os
 import logging
 import re
+import numpy as np
 from collections import Counter
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -610,6 +611,7 @@ def tab4_overlay():
         ),
         EdgeStyle(label="SIMILAR", color="#0000ff", caption="label", directed=False),
     ]
+    
     query = f"""
         MATCH (n)-[r]-(m)
         WHERE id(n) = {NODE_ID}
@@ -629,21 +631,46 @@ def tab4_overlay():
     display_link_prediction(node_styles, edge_styles, community_elements)
 
     st.markdown("## Similarity")
-    df_similarity = get_similarity(st.session_state.spark.createDataFrame(df_community))
-    edges = []
-    maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
-    for index, row in df_similarity.iterrows():
-        maxx += 1
-        edge = {}
-        edge["id"] = maxx
-        edge["label"] = "SIMILAR"
-        edge["source"] = row["nodeId1"]
-        edge["target"] = row["nodeId2"]
-        edge["similarity"] = 1.0 - row["features_diff_sum"]
-
-        edges.append({"data": edge})
-    community_elements["edges"].extend(edges)
-    st_link_analysis(community_elements, "cose", node_styles, edge_styles)
+    try:
+        df_similarity = get_similarity(st.session_state.spark.createDataFrame(df_community))
+        
+        if df_similarity is not None and not df_similarity.empty:
+            edges = []
+            if community_elements.get("edges") and len(community_elements["edges"]) > 0:
+                maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
+            else:
+                maxx = 0
+                
+            for index, row in df_similarity.iterrows():
+                maxx += 1
+                edge = {}
+                edge["id"] = maxx
+                edge["label"] = "SIMILAR"
+                # Check which column names are actually in the dataframe
+                if "node1" in row:
+                    edge["source"] = row["node1"]
+                    edge["target"] = row["node2"]
+                    edge["similarity"] = 1.0 - row["distCol"]
+                elif "nodeId1" in row:
+                    edge["source"] = row["nodeId1"]
+                    edge["target"] = row["nodeId2"]
+                    edge["similarity"] = 1.0 - row["features_diff_sum"]
+                else:
+                    # Debug: show what columns are actually available
+                    st.warning(f"Unexpected column names in similarity data: {list(row.index)}")
+                    continue
+                    
+                edges.append({"data": edge})
+            
+            if edges:
+                community_elements["edges"].extend(edges)
+            st_link_analysis(community_elements, "cose", node_styles, edge_styles, key="similarity")
+        else:
+            st.info("No similarity data available for this community")
+            st_link_analysis(community_elements, "cose", node_styles, edge_styles, key="similarity_empty")
+    except Exception as e:
+        st.error(f"Error in similarity analysis: {str(e)}")
+        st.link_analysis(community_elements, "cose", node_styles, edge_styles, key="similarity_error")
 
 
 def display_community(node_styles, edge_styles):
@@ -694,7 +721,7 @@ def display_community(node_styles, edge_styles):
     
     with viz_col1:
         # Community size distribution
-        st.subheader("🔍 Community Size Distribution")
+        st.subheader("📈 Community Size Distribution")
         fig_dist = px.histogram(
             all_communities_df.head(20),
             x='item_count',
@@ -801,8 +828,12 @@ def display_link_prediction(node_styles, edge_styles, community_elements):
     predictions = bulk_link_prediction(st.session_state.spark, "Person", s)
     predictions = predictions.where(predictions["score"] > LINK_PREDICTION_THRESHOLD)
 
+    # Collect predictions for analytics
+    predictions_list = predictions.collect()
+    predicted_edges = []
+    
     maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
-    for p in predictions.collect():
+    for p in predictions_list:
         if p["p1"]["<id>"] != p["p2"]["<id>"] and p["p1"]["<id>"] > p["p2"]["<id>"]:
             maxx += 1
             edge = {}
@@ -810,12 +841,200 @@ def display_link_prediction(node_styles, edge_styles, community_elements):
             edge["label"] = "POSSIBLY_RELATED"
             edge["source"] = p["p1"]["<id>"]
             edge["target"] = p["p2"]["<id>"]
-            edge["target"] = p["p2"]["<id>"]
+            edge["score"] = float(p["score"])  # Store the score for analytics
             community_elements["edges"].append({"data": edge})
+            predicted_edges.append(edge)
+            
     st.markdown("## Link Prediction")
     st_link_analysis(
         community_elements, "cose", node_styles, edge_styles, key="POSSIBLY_RELATED"
     )
+    
+    # Add Link Prediction Analytics
+    st.markdown("### 🔮 Link Prediction Analytics")
+    
+    if len(predicted_edges) > 0:
+        # Basic metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        scores = [e['score'] for e in predicted_edges]
+        
+        with col1:
+            st.metric("Predicted Links", len(predicted_edges))
+        
+        with col2:
+            avg_score = sum(scores) / len(scores) if scores else 0
+            st.metric("Avg Prediction Score", f"{avg_score:.2f}")
+        
+        with col3:
+            max_score = max(scores) if scores else 0
+            st.metric("Highest Score", f"{max_score:.2f}")
+        
+        with col4:
+            st.metric("Threshold Used", LINK_PREDICTION_THRESHOLD)
+        
+        # Visualizations
+        viz_col1, viz_col2 = st.columns(2)
+        
+        with viz_col1:
+            # Score distribution
+            st.subheader("📊 Score Distribution")
+            if scores:
+                scores_df = pd.DataFrame({'score': scores})
+                fig_hist = px.histogram(
+                    scores_df,
+                    x='score',
+                    nbins=20,
+                    title="Distribution of Prediction Scores",
+                    labels={'score': 'Prediction Score', 'count': 'Number of Predictions'},
+                    color_discrete_sequence=['#FF6B6B']
+                )
+                fig_hist.update_layout(
+                    height=350,
+                    showlegend=False
+                )
+                st.plotly_chart(fig_hist, use_container_width=True)
+        
+        with viz_col2:
+            # Top predictions
+            st.subheader("🎯 Top Predicted Links")
+            if predicted_edges:
+                # Sort by score and get top 10
+                top_predictions = sorted(predicted_edges, key=lambda x: x['score'], reverse=True)[:10]
+                top_df = pd.DataFrame([
+                    {'pair': f"Node {e['source']} ↔ {e['target']}", 'score': e['score']}
+                    for e in top_predictions
+                ])
+                
+                fig_bar = px.bar(
+                    top_df,
+                    x='score',
+                    y='pair',
+                    orientation='h',
+                    title="Top 10 Predicted Links by Score",
+                    labels={'score': 'Prediction Score', 'pair': 'Node Pair'},
+                    color='score',
+                    color_continuous_scale='Reds'
+                )
+                fig_bar.update_layout(
+                    height=350,
+                    showlegend=False,
+                    coloraxis_showscale=False
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+        
+        # Connectivity Analysis
+        st.subheader("🌐 Predicted Connectivity Analysis")
+        
+        # Count predictions per node
+        node_predictions = {}
+        for edge in predicted_edges:
+            source = edge['source']
+            target = edge['target']
+            node_predictions[source] = node_predictions.get(source, 0) + 1
+            node_predictions[target] = node_predictions.get(target, 0) + 1
+        
+        if node_predictions:
+            connectivity_df = pd.DataFrame(
+                list(node_predictions.items()),
+                columns=['Node ID', 'Predicted Connections']
+            ).sort_values('Predicted Connections', ascending=False)
+            
+            conn_col1, conn_col2 = st.columns(2)
+            
+            with conn_col1:
+                # Most connected nodes
+                if not connectivity_df.empty:
+                    top_connected = connectivity_df.head(10)
+                    fig_connected = px.bar(
+                        top_connected,
+                        x='Predicted Connections',
+                        y='Node ID',
+                        orientation='h',
+                        title="Most Connected Nodes (by Predictions)",
+                        labels={'Predicted Connections': 'Number of Predicted Links', 'Node ID': 'Node'},
+                        color='Predicted Connections',
+                        color_continuous_scale='Viridis'
+                    )
+                    fig_connected.update_layout(
+                        height=350,
+                        showlegend=False,
+                        coloraxis_showscale=False,
+                        yaxis={'type': 'category'}
+                    )
+                    st.plotly_chart(fig_connected, use_container_width=True)
+            
+            with conn_col2:
+                # Statistics
+                st.markdown("**Connectivity Statistics:**")
+                
+                avg_conn = connectivity_df['Predicted Connections'].mean()
+                max_conn = connectivity_df['Predicted Connections'].max()
+                min_conn = connectivity_df['Predicted Connections'].min()
+                std_conn = connectivity_df['Predicted Connections'].std()
+                
+                stats_df = pd.DataFrame({
+                    'Metric': ['Average', 'Maximum', 'Minimum', 'Std Dev', 'Total Nodes'],
+                    'Value': [f"{avg_conn:.2f}", 
+                             f"{max_conn:.0f}", 
+                             f"{min_conn:.0f}", 
+                             f"{std_conn:.2f}",
+                             f"{len(connectivity_df)}"]
+                })
+                st.table(stats_df)
+                
+                # Additional insights
+                st.markdown("**Insights:**")
+                high_connected = connectivity_df[connectivity_df['Predicted Connections'] >= avg_conn + std_conn]
+                st.write(f"• {len(high_connected)} nodes with above-average predictions")
+                st.write(f"• {len(connectivity_df)} total nodes involved in predictions")
+        
+        # Score Range Analysis
+        with st.expander("📈 Detailed Score Analysis"):
+            if scores:
+                # Create score ranges
+                score_ranges = pd.cut(scores, 
+                                     bins=[0, 2, 5, 10, 20, float('inf')],
+                                     labels=['Very Low (0-2)', 'Low (2-5)', 'Medium (5-10)', 
+                                            'High (10-20)', 'Very High (20+)'])
+                
+                range_counts = score_ranges.value_counts().reset_index()
+                range_counts.columns = ['Score Range', 'Count']
+                
+                # Pie chart
+                fig_pie = px.pie(
+                    range_counts,
+                    values='Count',
+                    names='Score Range',
+                    title='Prediction Score Categories',
+                    color_discrete_sequence=px.colors.sequential.RdBu
+                )
+                fig_pie.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label'
+                )
+                fig_pie.update_layout(height=400)
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # Summary statistics
+                st.markdown("**Statistical Summary:**")
+                scores_array = np.array(scores)
+                summary_df = pd.DataFrame({
+                    'Statistic': ['Count', 'Mean', 'Std Dev', 'Min', '25%', '50% (Median)', '75%', 'Max'],
+                    'Value': [
+                        f"{len(scores)}",
+                        f"{np.mean(scores_array):.2f}",
+                        f"{np.std(scores_array):.2f}",
+                        f"{np.min(scores_array):.2f}",
+                        f"{np.percentile(scores_array, 25):.2f}",
+                        f"{np.percentile(scores_array, 50):.2f}",
+                        f"{np.percentile(scores_array, 75):.2f}",
+                        f"{np.max(scores_array):.2f}"
+                    ]
+                })
+                st.table(summary_df)
+    else:
+        st.info("No link predictions found above the threshold. Try adjusting the threshold or exploring a different community.")
 
 
 def get_community_detection_df_graph(node_id):
