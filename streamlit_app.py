@@ -315,38 +315,7 @@ def tab1_overlay():
                 st.metric("Most Common Keyword", 
                          most_common['keyword'], 
                          f"({most_common['paper_count']} papers)")
-        
-        with st.expander("📊 Keyword Distribution Details"):
-            # Create a treemap for better visualization of keyword distribution
-            fig_treemap = px.treemap(
-                keywords_data.head(30),
-                path=['keyword'],
-                values='paper_count',
-                title='Keyword Distribution (Top 30)',
-                color='paper_count',
-                color_continuous_scale='Viridis',
-                hover_data={'paper_count': True}
-            )
-            
-            fig_treemap.update_layout(height=500)
-            st.plotly_chart(fig_treemap, use_container_width=True)
-            
-            # Show full keyword table
-            st.subheader("All Keywords Table")
-            all_keywords_query = """
-            MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
-            WITH k.name as keyword, count(p) as paper_count
-            ORDER BY paper_count DESC
-            RETURN keyword, paper_count
-            """
-            all_keywords_data = execute_spark_query(all_keywords_query)
-            
-            if not all_keywords_data.empty:
-                st.dataframe(
-                    all_keywords_data,
-                    use_container_width=True,
-                    height=400
-                )
+
 
 def tab2_overlay():
     st.header("📄 Papers Explorer")
@@ -386,64 +355,7 @@ def tab2_overlay():
     # Convert year to numeric
     papers_df['year'] = pd.to_numeric(papers_df['year'], errors='coerce')
     
-    # Title word analysis
-    st.subheader("🔍 Title Word Analysis")
-    
-    # Process titles to extract words
-    import re
-    from collections import Counter
-    
-    # Common stop words to exclude
-    stop_words = {
-        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'been', 'be',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these',
-        'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which',
-        'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both',
-        'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same',
-        'so', 'than', 'too', 'very', 'just', 'into', 'over', 'under', 'using',
-        'based', 'through', 'between', 'via', 'within', 'without', 'towards'
-    }
-    
-    # Extract words from titles
-    all_words = []
-    title_word_counts = []
-    for title in papers_df['title'].dropna():
-        words = re.findall(r'\b[a-z]+\b', title.lower())
-        title_word_counts.append(len(words))
-        # Filter out stop words and short words (less than 3 characters)
-        words = [w for w in words if w not in stop_words and len(w) >= 3]
-        all_words.extend(words)
-    
-    papers_df['title_word_count'] = pd.Series(title_word_counts[:len(papers_df)])
-    
-    # Count word frequencies
-    word_counts = Counter(all_words)
-    top_words = word_counts.most_common(25)
-    
-    if top_words:
-        words_df = pd.DataFrame(top_words, columns=['word', 'count'])
-        
-        # Single bar chart (removed column layout)
-        fig_words = px.bar(
-            words_df.head(15),
-            x='count',
-            y='word',
-            orientation='h',
-            labels={'count': 'Frequency', 'word': 'Word'},
-            title="Top 15 Most Common Words in Titles",
-            color='count',
-            color_continuous_scale='Teal'
-        )
-        fig_words.update_layout(
-            height=400,
-            yaxis={'categoryorder': 'total ascending'},
-            coloraxis_showscale=False,
-            showlegend=False
-        )
-        st.plotly_chart(fig_words, use_container_width=True)
-    
+    # Quick Statistics
     st.subheader("📊 Quick Statistics")
     
     stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
@@ -453,23 +365,19 @@ def tab2_overlay():
         st.metric("Papers Shown", total_papers)
     
     with stat_col2:
-        if 'title_word_count' in papers_df.columns:
-            avg_title_length = papers_df['title_word_count'].mean()
-            st.metric("Avg Title Length", f"{avg_title_length:.1f} words")
-        else:
-            st.metric("Avg Title Length", "N/A")
+        papers_with_abstract = papers_df['abstract'].notna().sum()
+        st.metric("Papers with Abstract", papers_with_abstract)
     
     with stat_col3:
-        if top_words:
-            most_common_word = words_df.iloc[0]['word']
-            word_freq = words_df.iloc[0]['count']
-            st.metric("Most Common Word", f"{most_common_word} ({word_freq}x)")
-        else:
-            st.metric("Most Common Word", "N/A")
-    
-    with stat_col4:
         unique_volumes = papers_df['volume_title'].nunique()
         st.metric("Unique Volumes", unique_volumes)
+    
+    with stat_col4:
+        if not papers_df.empty and 'year' in papers_df.columns:
+            year_range = f"{int(papers_df['year'].min())}-{int(papers_df['year'].max())}"
+            st.metric("Year Range", year_range)
+        else:
+            st.metric("Year Range", "N/A")
     
     # Display sample papers
     st.subheader("📄 Recent Papers Sample")
@@ -485,7 +393,6 @@ def tab2_overlay():
         volume_title = row.get('volume_title', 'Unknown Volume')
         
         with st.expander(f"📄 {paper_title} ({paper_year})"):
-
             col_left, col_right = st.columns([3, 1])
             
             with col_left:
@@ -510,37 +417,6 @@ def tab2_overlay():
                 if row.get('url'):
                     st.markdown(f"[🔗 View Paper]({row['url']})")
     
-    # Volume distribution chart
-    st.subheader("🥧 Papers Distribution Across Volumes")
-    
-    # Get top 15 volumes
-    top_volumes = papers_df['volume_title'].value_counts().head(15)
-    
-    fig_pie = px.pie(
-        values=top_volumes.values,
-        names=top_volumes.index,
-        title="Top 15 Volumes by Paper Count",
-        hole=0.4  # Create a donut chart
-    )
-    
-    fig_pie.update_traces(
-        textposition='inside',
-        textinfo='percent+label'
-    )
-    
-    fig_pie.update_layout(
-        height=500,
-        showlegend=True,
-        legend=dict(
-            yanchor="top",
-            y=1,
-            xanchor="left",
-            x=1.01
-        )
-    )
-    
-    st.plotly_chart(fig_pie, use_container_width=True)
-    
 def tab3_overlay():
     st.header("👥 People Network")
 
@@ -559,38 +435,25 @@ def tab3_overlay():
 
     if not authors_data.empty:
         df_authors = pd.DataFrame(authors_data)
+        
+        # Sort descending to ensure largest first
+        df_authors_sorted = df_authors.sort_values(by="paper_count", ascending=False)
+        
         fig_authors = px.bar(
-            df_authors.head(10),
+            df_authors_sorted.head(10),
             x="paper_count",
             y="name",
             orientation="h",
             title="Top 10 Authors by Publication Count",
         )
-        fig_authors.update_layout(height=500)
+        
+        # Make largest bar appear on top
+        fig_authors.update_layout(
+            height=500,
+            yaxis={'categoryorder':'total ascending'}
+        )
+        
         st.plotly_chart(fig_authors, use_container_width=True)
-
-        # Full table
-        st.subheader("All Authors")
-        st.dataframe(df_authors, use_container_width=True)
-    else:
-        st.info("No author data available.")
-
-    # Editors
-    st.subheader("📝 Volume Editors")
-
-    editors_query = """
-    MATCH (person:Person)-[r:EDITED]->(volume:Volume)
-    WITH person, count(volume) as volume_count
-    ORDER BY volume_count DESC
-    WITH person.name as name, volume_count
-    RETURN name, volume_count
-    """
-
-    editors_data = execute_spark_query(editors_query)
-
-    if not editors_data.empty:
-        df_editors = pd.DataFrame(editors_data)
-        st.dataframe(df_editors, use_container_width=True)
 
 def tab4_overlay():
     # Style node & edge groups
@@ -735,6 +598,9 @@ def display_community(node_styles, edge_styles):
             showlegend=False,
             bargap=0.1
         )
+        
+        fig_dist.update_xaxes(dtick=100)
+
         st.plotly_chart(fig_dist, use_container_width=True)
     
     with viz_col2:
@@ -875,53 +741,23 @@ def display_link_prediction(node_styles, edge_styles, community_elements):
         
         # Visualizations
         viz_col1, viz_col2 = st.columns(2)
-        
-        with viz_col1:
-            # Score distribution
-            st.subheader("📊 Score Distribution")
-            if scores:
-                scores_df = pd.DataFrame({'score': scores})
-                fig_hist = px.histogram(
-                    scores_df,
-                    x='score',
-                    nbins=20,
-                    title="Distribution of Prediction Scores",
-                    labels={'score': 'Prediction Score', 'count': 'Number of Predictions'},
-                    color_discrete_sequence=['#FF6B6B']
-                )
-                fig_hist.update_layout(
-                    height=350,
-                    showlegend=False
-                )
-                st.plotly_chart(fig_hist, use_container_width=True)
-        
-        with viz_col2:
-            # Top predictions
-            st.subheader("🎯 Top Predicted Links")
-            if predicted_edges:
-                # Sort by score and get top 10
-                top_predictions = sorted(predicted_edges, key=lambda x: x['score'], reverse=True)[:10]
-                top_df = pd.DataFrame([
-                    {'pair': f"Node {e['source']} ↔ {e['target']}", 'score': e['score']}
-                    for e in top_predictions
-                ])
-                
-                fig_bar = px.bar(
-                    top_df,
-                    x='score',
-                    y='pair',
-                    orientation='h',
-                    title="Top 10 Predicted Links by Score",
-                    labels={'score': 'Prediction Score', 'pair': 'Node Pair'},
-                    color='score',
-                    color_continuous_scale='Reds'
-                )
-                fig_bar.update_layout(
-                    height=350,
-                    showlegend=False,
-                    coloraxis_showscale=False
-                )
-                st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.subheader("📊 Score Distribution")
+        if scores:
+            scores_df = pd.DataFrame({'score': scores})
+            fig_hist = px.histogram(
+                scores_df,
+                x='score',
+                nbins=20,
+                title="Distribution of Prediction Scores",
+                labels={'score': 'Prediction Score', 'count': 'Number of Predictions'},
+                color_discrete_sequence=['#FF6B6B']
+            )
+            fig_hist.update_layout(
+                height=350,
+                showlegend=False
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
         
         # Connectivity Analysis
         st.subheader("🌐 Predicted Connectivity Analysis")
@@ -988,53 +824,6 @@ def display_link_prediction(node_styles, edge_styles, community_elements):
                 high_connected = connectivity_df[connectivity_df['Predicted Connections'] >= avg_conn + std_conn]
                 st.write(f"• {len(high_connected)} nodes with above-average predictions")
                 st.write(f"• {len(connectivity_df)} total nodes involved in predictions")
-        
-        # Score Range Analysis
-        with st.expander("📈 Detailed Score Analysis"):
-            if scores:
-                # Create score ranges
-                score_ranges = pd.cut(scores, 
-                                     bins=[0, 2, 5, 10, 20, float('inf')],
-                                     labels=['Very Low (0-2)', 'Low (2-5)', 'Medium (5-10)', 
-                                            'High (10-20)', 'Very High (20+)'])
-                
-                range_counts = score_ranges.value_counts().reset_index()
-                range_counts.columns = ['Score Range', 'Count']
-                
-                # Pie chart
-                fig_pie = px.pie(
-                    range_counts,
-                    values='Count',
-                    names='Score Range',
-                    title='Prediction Score Categories',
-                    color_discrete_sequence=px.colors.sequential.RdBu
-                )
-                fig_pie.update_traces(
-                    textposition='inside',
-                    textinfo='percent+label'
-                )
-                fig_pie.update_layout(height=400)
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-                # Summary statistics
-                st.markdown("**Statistical Summary:**")
-                scores_array = np.array(scores)
-                summary_df = pd.DataFrame({
-                    'Statistic': ['Count', 'Mean', 'Std Dev', 'Min', '25%', '50% (Median)', '75%', 'Max'],
-                    'Value': [
-                        f"{len(scores)}",
-                        f"{np.mean(scores_array):.2f}",
-                        f"{np.std(scores_array):.2f}",
-                        f"{np.min(scores_array):.2f}",
-                        f"{np.percentile(scores_array, 25):.2f}",
-                        f"{np.percentile(scores_array, 50):.2f}",
-                        f"{np.percentile(scores_array, 75):.2f}",
-                        f"{np.max(scores_array):.2f}"
-                    ]
-                })
-                st.table(summary_df)
-    else:
-        st.info("No link predictions found above the threshold. Try adjusting the threshold or exploring a different community.")
 
 
 def get_community_detection_df_graph(node_id):

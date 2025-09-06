@@ -22,7 +22,7 @@ def link_prediction(
 
 
 def bulk_link_prediction(
-    spark: SparkSession, node: str, ids: list[int], algorithm="commonNeighbors"
+    spark: SparkSession, node: str, ids: list[int], algorithm="adamicAdar"
 ) -> float:
     prediction_score = (
         spark.read.format("org.neo4j.spark.DataSource")
