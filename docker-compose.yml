@@ -126,7 +126,7 @@ services:
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASSWORD=password
       - LINK_PREDICTION_THRESHOLD=1
-    # - NODE_ID=0
+      - NODE_ID=230
     networks:
       - spark-net
     profiles:

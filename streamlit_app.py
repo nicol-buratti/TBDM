@@ -43,18 +43,19 @@ NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 LINK_PREDICTION_THRESHOLD = os.getenv("LINK_PREDICTION_THRESHOLD", "1")
 LINK_PREDICTION_THRESHOLD = int(LINK_PREDICTION_THRESHOLD)
-NODE_ID = 230
+NODE_ID = int(os.getenv("NODE_ID", "-1"))
 
 if "spark" not in st.session_state:
     st.session_state.spark = _initialize_spark()
 
 
-def execute_spark_query(query: str):
+def execute_spark_query(query: str, limit: int = 25) -> pd.DataFrame:
     """Execute a Cypher query using Spark and return results as a DataFrame"""
     df = (
         st.session_state.spark.read.format("org.neo4j.spark.DataSource")
         .option("query", query)
         .load()
+        .limit(limit)
     )
     return df.toPandas()
 
@@ -189,7 +190,7 @@ def tab1_overlay():
             f"{avg_papers_per_volume:.1f}",
             help="Average number of papers per volume",
         )
-    
+
     # Recent papers chart
     st.subheader("📈 Papers by Year")
 
@@ -206,46 +207,46 @@ def tab1_overlay():
         st.info("No year data available for papers.")
     else:
         # Convert year to integer if it's a string
-        year_data['year'] = pd.to_numeric(year_data['year'], errors='coerce')
-        year_data = year_data.dropna(subset=['year'])
-        year_data['year'] = year_data['year'].astype(int)
-        
+        year_data["year"] = pd.to_numeric(year_data["year"], errors="coerce")
+        year_data = year_data.dropna(subset=["year"])
+        year_data["year"] = year_data["year"].astype(int)
+
         fig = px.line(
             year_data,
-            x='year',
-            y='count',
-            title='Number of Papers Published by Year',
-            labels={'year': 'Year', 'count': 'Number of Papers'},
-            markers=True
+            x="year",
+            y="count",
+            title="Number of Papers Published by Year",
+            labels={"year": "Year", "count": "Number of Papers"},
+            markers=True,
         )
-        
+
         fig.update_layout(
             xaxis_title="Year",
             yaxis_title="Number of Papers",
-            hovermode='x unified',
-            showlegend=False
+            hovermode="x unified",
+            showlegend=False,
         )
-        
+
         st.plotly_chart(fig, use_container_width=True)
-        
+
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             if not year_data.empty:
-                st.metric("Earliest Year", int(year_data['year'].min()))
-        
+                st.metric("Earliest Year", int(year_data["year"].min()))
+
         with col2:
             if not year_data.empty:
-                st.metric("Latest Year", int(year_data['year'].max()))
-        
+                st.metric("Latest Year", int(year_data["year"].max()))
+
         with col3:
             if not year_data.empty:
-                avg_papers_per_year = year_data['count'].mean()
+                avg_papers_per_year = year_data["count"].mean()
                 st.metric("Avg Papers/Year", f"{avg_papers_per_year:.1f}")
-    
+
     # Most common keywords chart
     st.subheader("🏷️ Most Common Keywords")
-    
+
     keywords_query = """
     MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
     WITH k.name as keyword, count(p) as paper_count
@@ -253,43 +254,40 @@ def tab1_overlay():
     LIMIT 20
     RETURN keyword, paper_count
     """
-    
+
     keywords_data = execute_spark_query(keywords_query)
-    
+
     if keywords_data.empty:
         st.info("No keyword data available.")
     else:
         # Create horizontal bar chart for better readability of keyword names
         fig_keywords = px.bar(
             keywords_data,
-            x='paper_count',
-            y='keyword',
-            orientation='h',
-            title='Top 20 Most Common Keywords in Papers',
-            labels={'paper_count': 'Number of Papers', 'keyword': 'Keyword'},
-            color='paper_count',
-            color_continuous_scale='Blues',
-            text='paper_count'
+            x="paper_count",
+            y="keyword",
+            orientation="h",
+            title="Top 20 Most Common Keywords in Papers",
+            labels={"paper_count": "Number of Papers", "keyword": "Keyword"},
+            color="paper_count",
+            color_continuous_scale="Blues",
+            text="paper_count",
         )
-        
+
         fig_keywords.update_layout(
             height=600,
             xaxis_title="Number of Papers",
             yaxis_title="Keywords",
             showlegend=False,
-            yaxis={'categoryorder': 'total ascending'},
-            coloraxis_showscale=False
+            yaxis={"categoryorder": "total ascending"},
+            coloraxis_showscale=False,
         )
-        
-        fig_keywords.update_traces(
-            texttemplate='%{text}',
-            textposition='outside'
-        )
-        
+
+        fig_keywords.update_traces(texttemplate="%{text}", textposition="outside")
+
         st.plotly_chart(fig_keywords, use_container_width=True)
-        
+
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             total_keywords_query = """
             MATCH (k:Keyword)
@@ -297,8 +295,8 @@ def tab1_overlay():
             """
             total_keywords = execute_spark_query(total_keywords_query)
             if not total_keywords.empty:
-                st.metric("Total Unique Keywords", total_keywords.iloc[0]['count'])
-        
+                st.metric("Total Unique Keywords", total_keywords.iloc[0]["count"])
+
         with col2:
             avg_keywords_query = """
             MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
@@ -306,20 +304,25 @@ def tab1_overlay():
             RETURN avg(keyword_count) as avg_keywords
             """
             avg_keywords = execute_spark_query(avg_keywords_query)
-            if not avg_keywords.empty and avg_keywords.iloc[0]['avg_keywords']:
-                st.metric("Avg Keywords per Paper", f"{avg_keywords.iloc[0]['avg_keywords']:.1f}")
-        
+            if not avg_keywords.empty and avg_keywords.iloc[0]["avg_keywords"]:
+                st.metric(
+                    "Avg Keywords per Paper",
+                    f"{avg_keywords.iloc[0]['avg_keywords']:.1f}",
+                )
+
         with col3:
             if not keywords_data.empty:
                 most_common = keywords_data.iloc[0]
-                st.metric("Most Common Keyword", 
-                         most_common['keyword'], 
-                         f"({most_common['paper_count']} papers)")
+                st.metric(
+                    "Most Common Keyword",
+                    most_common["keyword"],
+                    f"({most_common['paper_count']} papers)",
+                )
 
 
 def tab2_overlay():
     st.header("📄 Papers Explorer")
-    
+
     # Load all papers data at once
     papers_query = """
     MATCH (v:Volume)-[:CONTAINS]->(p:Paper)
@@ -334,7 +337,7 @@ def tab2_overlay():
         v.volnr as volume_id
     ORDER BY v.pubyear DESC, p.title
     """
-    
+
     try:
         papers_df = (
             st.session_state.spark.read.format("org.neo4j.spark.DataSource")
@@ -347,76 +350,79 @@ def tab2_overlay():
         st.error(f"Error loading papers: {str(e)}")
         papers_df = pd.DataFrame()
         return
-    
+
     if papers_df.empty:
         st.warning("No papers found in the database.")
         return
-    
+
     # Convert year to numeric
-    papers_df['year'] = pd.to_numeric(papers_df['year'], errors='coerce')
-    
+    papers_df["year"] = pd.to_numeric(papers_df["year"], errors="coerce")
+
     # Quick Statistics
     st.subheader("📊 Quick Statistics")
-    
+
     stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
-    
+
     with stat_col1:
         total_papers = len(papers_df)
         st.metric("Papers Shown", total_papers)
-    
+
     with stat_col2:
-        papers_with_abstract = papers_df['abstract'].notna().sum()
+        papers_with_abstract = papers_df["abstract"].notna().sum()
         st.metric("Papers with Abstract", papers_with_abstract)
-    
+
     with stat_col3:
-        unique_volumes = papers_df['volume_title'].nunique()
+        unique_volumes = papers_df["volume_title"].nunique()
         st.metric("Unique Volumes", unique_volumes)
-    
+
     with stat_col4:
-        if not papers_df.empty and 'year' in papers_df.columns:
-            year_range = f"{int(papers_df['year'].min())}-{int(papers_df['year'].max())}"
+        if not papers_df.empty and "year" in papers_df.columns:
+            year_range = (
+                f"{int(papers_df['year'].min())}-{int(papers_df['year'].max())}"
+            )
             st.metric("Year Range", year_range)
         else:
             st.metric("Year Range", "N/A")
-    
+
     # Display sample papers
     st.subheader("📄 Recent Papers Sample")
     st.info("Showing a sample of recent papers from the database")
-    
+
     # Get the 20 most recent papers
-    recent_papers = papers_df.nlargest(20, 'year')
-    
+    recent_papers = papers_df.nlargest(20, "year")
+
     # Display papers
     for idx, row in recent_papers.iterrows():
-        paper_title = row.get('title', 'Untitled')
-        paper_year = row.get('year', 'N/A')
-        volume_title = row.get('volume_title', 'Unknown Volume')
-        
+        paper_title = row.get("title", "Untitled")
+        paper_year = row.get("year", "N/A")
+        volume_title = row.get("volume_title", "Unknown Volume")
+
         with st.expander(f"📄 {paper_title} ({paper_year})"):
             col_left, col_right = st.columns([3, 1])
-            
+
             with col_left:
                 st.markdown("**Abstract:**")
-                if row.get('abstract'):
+                if row.get("abstract"):
                     # Truncate abstract
-                    abstract_text = row['abstract']
+                    abstract_text = row["abstract"]
                     if len(abstract_text) > 1000:
                         abstract_text = abstract_text[:1000] + "..."
                     st.write(abstract_text)
                 else:
                     st.write("*No abstract available*")
-            
+
             with col_right:
                 st.markdown("**Details:**")
                 st.write(f"📅 Year: {paper_year}")
                 st.write(f"📚 Volume: {volume_title}")
-                
-                if row.get('pages'):
+
+                if row.get("pages"):
                     st.write(f"📄 Pages: {row['pages']}")
-                
-                if row.get('url'):
+
+                if row.get("url"):
                     st.markdown(f"[🔗 View Paper]({row['url']})")
-    
+
+
 def tab3_overlay():
     st.header("👥 People Network")
 
@@ -435,10 +441,10 @@ def tab3_overlay():
 
     if not authors_data.empty:
         df_authors = pd.DataFrame(authors_data)
-        
+
         # Sort descending to ensure largest first
         df_authors_sorted = df_authors.sort_values(by="paper_count", ascending=False)
-        
+
         fig_authors = px.bar(
             df_authors_sorted.head(10),
             x="paper_count",
@@ -446,14 +452,14 @@ def tab3_overlay():
             orientation="h",
             title="Top 10 Authors by Publication Count",
         )
-        
+
         # Make largest bar appear on top
         fig_authors.update_layout(
-            height=500,
-            yaxis={'categoryorder':'total ascending'}
+            height=500, yaxis={"categoryorder": "total ascending"}
         )
-        
+
         st.plotly_chart(fig_authors, use_container_width=True)
+
 
 def tab4_overlay():
     # Style node & edge groups
@@ -474,7 +480,7 @@ def tab4_overlay():
         ),
         EdgeStyle(label="SIMILAR", color="#0000ff", caption="label", directed=False),
     ]
-    
+
     query = f"""
         MATCH (n)-[r]-(m)
         WHERE id(n) = {NODE_ID}
@@ -495,15 +501,19 @@ def tab4_overlay():
 
     st.markdown("## Similarity")
     try:
-        df_similarity = get_similarity(st.session_state.spark.createDataFrame(df_community))
-        
+        df_similarity = get_similarity(
+            st.session_state.spark.createDataFrame(df_community)
+        )
+
         if df_similarity is not None and not df_similarity.empty:
             edges = []
             if community_elements.get("edges") and len(community_elements["edges"]) > 0:
-                maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
+                maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])[
+                    "data"
+                ]["id"]
             else:
                 maxx = 0
-                
+
             for index, row in df_similarity.iterrows():
                 maxx += 1
                 edge = {}
@@ -520,20 +530,32 @@ def tab4_overlay():
                     edge["similarity"] = 1.0 - row["features_diff_sum"]
                 else:
                     # Debug: show what columns are actually available
-                    st.warning(f"Unexpected column names in similarity data: {list(row.index)}")
+                    st.warning(
+                        f"Unexpected column names in similarity data: {list(row.index)}"
+                    )
                     continue
-                    
+
                 edges.append({"data": edge})
-            
+
             if edges:
                 community_elements["edges"].extend(edges)
-            st_link_analysis(community_elements, "cose", node_styles, edge_styles, key="similarity")
+            st_link_analysis(
+                community_elements, "cose", node_styles, edge_styles, key="similarity"
+            )
         else:
             st.info("No similarity data available for this community")
-            st_link_analysis(community_elements, "cose", node_styles, edge_styles, key="similarity_empty")
+            st_link_analysis(
+                community_elements,
+                "cose",
+                node_styles,
+                edge_styles,
+                key="similarity_empty",
+            )
     except Exception as e:
         st.error(f"Error in similarity analysis: {str(e)}")
-        st.link_analysis(community_elements, "cose", node_styles, edge_styles, key="similarity_error")
+        st.link_analysis(
+            community_elements, "cose", node_styles, edge_styles, key="similarity_error"
+        )
 
 
 def display_community(node_styles, edge_styles):
@@ -541,103 +563,101 @@ def display_community(node_styles, edge_styles):
     community_elements = transform_df_to_graph_elements(df_community)
     st.markdown("## Community")
     st_link_analysis(community_elements, "cose", node_styles, edge_styles)
-    
+
     st.markdown("### 📊 Community Analytics")
-    
+
     # Get all communities
     all_communities_df = get_community()
-    
+
     if all_communities_df is None or all_communities_df.empty:
         st.warning("No community data available")
         return df_community, community_elements
-    
+
     # Find which community the current node belongs to
     current_community_id = None
-    node_ids_list = [row['nodeIds'] for _, row in all_communities_df.iterrows()]
+    node_ids_list = [row["nodeIds"] for _, row in all_communities_df.iterrows()]
     for i, nodes in enumerate(node_ids_list):
         if NODE_ID in nodes:
             current_community_id = i
             break
-    
+
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         total_communities = len(all_communities_df)
         st.metric("Total Communities", total_communities)
-    
+
     with col2:
         if current_community_id is not None:
-            current_community_size = all_communities_df.iloc[current_community_id]['item_count']
+            current_community_size = all_communities_df.iloc[current_community_id][
+                "item_count"
+            ]
             st.metric("Current Community Size", current_community_size)
         else:
             st.metric("Current Community Size", "N/A")
-    
+
     with col3:
-        avg_community_size = all_communities_df['item_count'].mean()
+        avg_community_size = all_communities_df["item_count"].mean()
         st.metric("Avg Community Size", f"{avg_community_size:.1f}")
-    
+
     with col4:
-        largest_community = all_communities_df['item_count'].max()
+        largest_community = all_communities_df["item_count"].max()
         st.metric("Largest Community", largest_community)
 
     viz_col1, viz_col2 = st.columns(2)
-    
+
     with viz_col1:
         # Community size distribution
         st.subheader("📈 Community Size Distribution")
         fig_dist = px.histogram(
             all_communities_df.head(20),
-            x='item_count',
+            x="item_count",
             nbins=20,
             title="Distribution of Community Sizes (Top 20)",
-            labels={'item_count': 'Number of Nodes', 'count': 'Number of Communities'},
-            color_discrete_sequence=['#1f77b4']
+            labels={"item_count": "Number of Nodes", "count": "Number of Communities"},
+            color_discrete_sequence=["#1f77b4"],
         )
-        fig_dist.update_layout(
-            height=350,
-            showlegend=False,
-            bargap=0.1
-        )
-        
+        fig_dist.update_layout(height=350, showlegend=False, bargap=0.1)
+
         fig_dist.update_xaxes(dtick=100)
 
         st.plotly_chart(fig_dist, use_container_width=True)
-    
+
     with viz_col2:
         # Top communities
         st.subheader("🏆 Top 10 Largest Communities")
         top_communities = all_communities_df.head(10).copy()
-        top_communities['community_label'] = ['Community ' + str(i) for i in range(len(top_communities))]
-        
-        colors = ['#FF7F3E' if i == current_community_id else '#1f77b4' 
-                  for i in range(len(top_communities))]
-        
+        top_communities["community_label"] = [
+            "Community " + str(i) for i in range(len(top_communities))
+        ]
+
+        colors = [
+            "#FF7F3E" if i == current_community_id else "#1f77b4"
+            for i in range(len(top_communities))
+        ]
+
         fig_top = px.bar(
             top_communities,
-            x='community_label',
-            y='item_count',
+            x="community_label",
+            y="item_count",
             title="Largest Communities by Node Count",
-            labels={'item_count': 'Number of Nodes', 'community_label': 'Community'},
-            color_discrete_sequence=colors
+            labels={"item_count": "Number of Nodes", "community_label": "Community"},
+            color_discrete_sequence=colors,
         )
-        fig_top.update_layout(
-            height=350,
-            showlegend=False,
-            xaxis_tickangle=-45
-        )
+        fig_top.update_layout(height=350, showlegend=False, xaxis_tickangle=-45)
         st.plotly_chart(fig_top, use_container_width=True)
-    
+
     # Node type composition in current community
-    if current_community_id is not None and len(community_elements['nodes']) > 0:
+    if current_community_id is not None and len(community_elements["nodes"]) > 0:
         st.subheader("🎯 Current Community Composition")
-        
+
         node_types = {}
-        for node in community_elements['nodes']:
-            node_label = node['data']['label']
+        for node in community_elements["nodes"]:
+            node_label = node["data"]["label"]
             node_types[node_label] = node_types.get(node_label, 0) + 1
-        
+
         comp_col1, comp_col2 = st.columns(2)
-        
+
         with comp_col1:
             # Chart of node types
             if node_types:
@@ -646,39 +666,43 @@ def display_community(node_styles, edge_styles):
                     names=list(node_types.keys()),
                     title=f"Node Types in Community {current_community_id}",
                     color_discrete_map={
-                        'Volume': '#0E12F3',
-                        'Paper': '#04D10E',
-                        'Person': '#0EEDF9',
-                        'Keyword': '#FF7F3E'
-                    }
+                        "Volume": "#0E12F3",
+                        "Paper": "#04D10E",
+                        "Person": "#0EEDF9",
+                        "Keyword": "#FF7F3E",
+                    },
                 )
-                fig_pie.update_traces(
-                    textposition='inside',
-                    textinfo='percent+label'
-                )
+                fig_pie.update_traces(textposition="inside", textinfo="percent+label")
                 fig_pie.update_layout(height=300)
                 st.plotly_chart(fig_pie, use_container_width=True)
-        
+
         with comp_col2:
             # Table of node type counts
             if node_types:
                 node_types_df = pd.DataFrame(
-                    list(node_types.items()),
-                    columns=['Node Type', 'Count']
-                ).sort_values('Count', ascending=False)
-                
+                    list(node_types.items()), columns=["Node Type", "Count"]
+                ).sort_values("Count", ascending=False)
+
                 st.markdown("**Node Type Breakdown:**")
                 st.dataframe(node_types_df, use_container_width=True, hide_index=True)
-                
+
                 total_nodes = sum(node_types.values())
-                total_edges = len(community_elements['edges'])
-                density = (2 * total_edges) / (total_nodes * (total_nodes - 1)) if total_nodes > 1 else 0
-                
+                total_edges = len(community_elements["edges"])
+                density = (
+                    (2 * total_edges) / (total_nodes * (total_nodes - 1))
+                    if total_nodes > 1
+                    else 0
+                )
+
                 st.markdown("**Community Metrics:**")
                 st.write(f"• **Total Edges:** {total_edges}")
                 st.write(f"• **Graph Density:** {density:.3f}")
-                st.write(f"• **Avg Degree:** {(2 * total_edges / total_nodes):.2f}" if total_nodes > 0 else "N/A")
-    
+                st.write(
+                    f"• **Avg Degree:** {(2 * total_edges / total_nodes):.2f}"
+                    if total_nodes > 0
+                    else "N/A"
+                )
+
     return df_community, community_elements
 
 
@@ -697,7 +721,7 @@ def display_link_prediction(node_styles, edge_styles, community_elements):
     # Collect predictions for analytics
     predictions_list = predictions.collect()
     predicted_edges = []
-    
+
     maxx = max(community_elements["edges"], key=lambda x: x["data"]["id"])["data"]["id"]
     for p in predictions_list:
         if p["p1"]["<id>"] != p["p2"]["<id>"] and p["p1"]["<id>"] > p["p2"]["<id>"]:
@@ -710,120 +734,136 @@ def display_link_prediction(node_styles, edge_styles, community_elements):
             edge["score"] = float(p["score"])  # Store the score for analytics
             community_elements["edges"].append({"data": edge})
             predicted_edges.append(edge)
-            
+
     st.markdown("## Link Prediction")
     st_link_analysis(
         community_elements, "cose", node_styles, edge_styles, key="POSSIBLY_RELATED"
     )
-    
+
     # Add Link Prediction Analytics
     st.markdown("### 🔮 Link Prediction Analytics")
-    
+
     if len(predicted_edges) > 0:
         # Basic metrics
         col1, col2, col3, col4 = st.columns(4)
-        
-        scores = [e['score'] for e in predicted_edges]
-        
+
+        scores = [e["score"] for e in predicted_edges]
+
         with col1:
             st.metric("Predicted Links", len(predicted_edges))
-        
+
         with col2:
             avg_score = sum(scores) / len(scores) if scores else 0
             st.metric("Avg Prediction Score", f"{avg_score:.2f}")
-        
+
         with col3:
             max_score = max(scores) if scores else 0
             st.metric("Highest Score", f"{max_score:.2f}")
-        
+
         with col4:
             st.metric("Threshold Used", LINK_PREDICTION_THRESHOLD)
-        
+
         # Visualizations
         viz_col1, viz_col2 = st.columns(2)
 
         st.subheader("📊 Score Distribution")
         if scores:
-            scores_df = pd.DataFrame({'score': scores})
+            scores_df = pd.DataFrame({"score": scores})
             fig_hist = px.histogram(
                 scores_df,
-                x='score',
+                x="score",
                 nbins=20,
                 title="Distribution of Prediction Scores",
-                labels={'score': 'Prediction Score', 'count': 'Number of Predictions'},
-                color_discrete_sequence=['#FF6B6B']
+                labels={"score": "Prediction Score", "count": "Number of Predictions"},
+                color_discrete_sequence=["#FF6B6B"],
             )
-            fig_hist.update_layout(
-                height=350,
-                showlegend=False
-            )
+            fig_hist.update_layout(height=350, showlegend=False)
             st.plotly_chart(fig_hist, use_container_width=True)
-        
+
         # Connectivity Analysis
         st.subheader("🌐 Predicted Connectivity Analysis")
-        
+
         # Count predictions per node
         node_predictions = {}
         for edge in predicted_edges:
-            source = edge['source']
-            target = edge['target']
+            source = edge["source"]
+            target = edge["target"]
             node_predictions[source] = node_predictions.get(source, 0) + 1
             node_predictions[target] = node_predictions.get(target, 0) + 1
-        
+
         if node_predictions:
             connectivity_df = pd.DataFrame(
                 list(node_predictions.items()),
-                columns=['Node ID', 'Predicted Connections']
-            ).sort_values('Predicted Connections', ascending=False)
-            
+                columns=["Node ID", "Predicted Connections"],
+            ).sort_values("Predicted Connections", ascending=False)
+
             conn_col1, conn_col2 = st.columns(2)
-            
+
             with conn_col1:
                 # Most connected nodes
                 if not connectivity_df.empty:
                     top_connected = connectivity_df.head(10)
                     fig_connected = px.bar(
                         top_connected,
-                        x='Predicted Connections',
-                        y='Node ID',
-                        orientation='h',
+                        x="Predicted Connections",
+                        y="Node ID",
+                        orientation="h",
                         title="Most Connected Nodes (by Predictions)",
-                        labels={'Predicted Connections': 'Number of Predicted Links', 'Node ID': 'Node'},
-                        color='Predicted Connections',
-                        color_continuous_scale='Viridis'
+                        labels={
+                            "Predicted Connections": "Number of Predicted Links",
+                            "Node ID": "Node",
+                        },
+                        color="Predicted Connections",
+                        color_continuous_scale="Viridis",
                     )
                     fig_connected.update_layout(
                         height=350,
                         showlegend=False,
                         coloraxis_showscale=False,
-                        yaxis={'type': 'category'}
+                        yaxis={"type": "category"},
                     )
                     st.plotly_chart(fig_connected, use_container_width=True)
-            
+
             with conn_col2:
                 # Statistics
                 st.markdown("**Connectivity Statistics:**")
-                
-                avg_conn = connectivity_df['Predicted Connections'].mean()
-                max_conn = connectivity_df['Predicted Connections'].max()
-                min_conn = connectivity_df['Predicted Connections'].min()
-                std_conn = connectivity_df['Predicted Connections'].std()
-                
-                stats_df = pd.DataFrame({
-                    'Metric': ['Average', 'Maximum', 'Minimum', 'Std Dev', 'Total Nodes'],
-                    'Value': [f"{avg_conn:.2f}", 
-                             f"{max_conn:.0f}", 
-                             f"{min_conn:.0f}", 
-                             f"{std_conn:.2f}",
-                             f"{len(connectivity_df)}"]
-                })
+
+                avg_conn = connectivity_df["Predicted Connections"].mean()
+                max_conn = connectivity_df["Predicted Connections"].max()
+                min_conn = connectivity_df["Predicted Connections"].min()
+                std_conn = connectivity_df["Predicted Connections"].std()
+
+                stats_df = pd.DataFrame(
+                    {
+                        "Metric": [
+                            "Average",
+                            "Maximum",
+                            "Minimum",
+                            "Std Dev",
+                            "Total Nodes",
+                        ],
+                        "Value": [
+                            f"{avg_conn:.2f}",
+                            f"{max_conn:.0f}",
+                            f"{min_conn:.0f}",
+                            f"{std_conn:.2f}",
+                            f"{len(connectivity_df)}",
+                        ],
+                    }
+                )
                 st.table(stats_df)
-                
+
                 # Additional insights
                 st.markdown("**Insights:**")
-                high_connected = connectivity_df[connectivity_df['Predicted Connections'] >= avg_conn + std_conn]
-                st.write(f"• {len(high_connected)} nodes with above-average predictions")
-                st.write(f"• {len(connectivity_df)} total nodes involved in predictions")
+                high_connected = connectivity_df[
+                    connectivity_df["Predicted Connections"] >= avg_conn + std_conn
+                ]
+                st.write(
+                    f"• {len(high_connected)} nodes with above-average predictions"
+                )
+                st.write(
+                    f"• {len(connectivity_df)} total nodes involved in predictions"
+                )
 
 
 def get_community_detection_df_graph(node_id):
@@ -885,10 +925,12 @@ def transform_df_to_graph_elements(df):
 
     return elements
 
-if NODE_ID == -1:
-    query = """MATCH (n:Paper) RETURN n LIMIT 1"""
-    execute_spark_query(query)
-    execute_spark_query(query)
+
+if NODE_ID < 0:
+    query = """MATCH (n:Paper) RETURN n"""
+    NODE_ID = execute_spark_query(query, limit=1).head(1)["n"][0]["<id>"]
+
+logging.info(f"Using NODE_ID: {NODE_ID}")
 
 # Header
 st.title("📚 Research Paper Network Explorer")
