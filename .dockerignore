@@ -35,3 +35,6 @@ LICENSE
 README.md
 **/data
 **/web-scraper
+**/data-injection
+**/.ruff_cache
+**/images
