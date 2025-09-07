@@ -517,7 +517,6 @@ def tab4_overlay():
         df_similarity = df_similarity[
             df_similarity["nodeId1"].isin(s) & df_similarity["nodeId2"].isin(s)
         ]
-        st.dataframe(df_similarity, use_container_width=True)
 
         if df_similarity is not None and not df_similarity.empty:
             edges = []
