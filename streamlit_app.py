@@ -49,7 +49,7 @@ if "spark" not in st.session_state:
     st.session_state.spark = _initialize_spark()
 
 
-def execute_spark_query(query: str, limit: int = 25) -> pd.DataFrame:
+def execute_spark_query(query: str, limit: int = 1000) -> pd.DataFrame:
     """Execute a Cypher query using Spark and return results as a DataFrame"""
     df = (
         st.session_state.spark.read.format("org.neo4j.spark.DataSource")
