@@ -46,11 +46,11 @@ def similarity(
             ),
         )
         .withColumn(
-            "features_diff_sum",
+            "similarity",
             expr("aggregate(features_diff, 0D, (acc, x) -> acc + abs(x))"),
         )
-        .where(col("features_diff_sum") <= SIMILARITY_THRESHOLD)
-        .select("nodeId1", "nodeId2", "features_diff_sum")
+        .where(col("similarity") <= SIMILARITY_THRESHOLD)
+        .select("nodeId1", "nodeId2", "similarity")
     )
 
 

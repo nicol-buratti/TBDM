@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -11,7 +12,7 @@ from pyspark.sql import functions as F
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
 
 from functionalities.link_prediction import bulk_link_prediction
-from functionalities.similarity import similarity
+from functionalities.similarity import similarity, similarity_gds
 from functionalities.community_detection import get_spark_df_communities
 
 
@@ -109,9 +110,10 @@ def get_community():
     ).toPandas()
 
 
-def get_similarity(_df):
+def get_similarity():
     logging.info("Fetching similarity data...")
-    return similarity(st.session_state.spark, "graph", _df).toPandas()
+    return similarity_gds(st.session_state.spark, "graph").toPandas()
+    # return similarity(st.session_state.spark, "graph", _df).toPandas()
 
 
 def sidebar():
@@ -501,9 +503,21 @@ def tab4_overlay():
 
     st.markdown("## Similarity")
     try:
-        df_similarity = get_similarity(
-            st.session_state.spark.createDataFrame(df_community)
+        s = list(
+            {
+                e["data"]["id"]
+                for e in community_elements["nodes"]
+                if e["data"]["label"] == "Person"
+            }
         )
+        df_similarity = get_similarity()
+        df_similarity = df_similarity[
+            df_similarity["nodeId1"] < df_similarity["nodeId2"]
+        ]
+        df_similarity = df_similarity[
+            df_similarity["nodeId1"].isin(s) & df_similarity["nodeId2"].isin(s)
+        ]
+        st.dataframe(df_similarity, use_container_width=True)
 
         if df_similarity is not None and not df_similarity.empty:
             edges = []
@@ -514,26 +528,15 @@ def tab4_overlay():
             else:
                 maxx = 0
 
-            for index, row in df_similarity.iterrows():
+            for row in df_similarity.itertuples():
                 maxx += 1
-                edge = {}
-                edge["id"] = maxx
-                edge["label"] = "SIMILAR"
-                # Check which column names are actually in the dataframe
-                if "node1" in row:
-                    edge["source"] = row["node1"]
-                    edge["target"] = row["node2"]
-                    edge["similarity"] = 1.0 - row["distCol"]
-                elif "nodeId1" in row:
-                    edge["source"] = row["nodeId1"]
-                    edge["target"] = row["nodeId2"]
-                    edge["similarity"] = 1.0 - row["features_diff_sum"]
-                else:
-                    # Debug: show what columns are actually available
-                    st.warning(
-                        f"Unexpected column names in similarity data: {list(row.index)}"
-                    )
-                    continue
+                edge = {
+                    "id": maxx,
+                    "label": "SIMILAR",
+                    "source": int(row.nodeId1),
+                    "target": int(row.nodeId2),
+                    "similarity": row.similarity,
+                }
 
                 edges.append({"data": edge})
 
@@ -553,7 +556,7 @@ def tab4_overlay():
             )
     except Exception as e:
         st.error(f"Error in similarity analysis: {str(e)}")
-        st.link_analysis(
+        st_link_analysis(
             community_elements, "cose", node_styles, edge_styles, key="similarity_error"
         )
 
