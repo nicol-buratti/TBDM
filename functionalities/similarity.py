@@ -52,3 +52,23 @@ def similarity(
         .where(col("features_diff_sum") <= SIMILARITY_THRESHOLD)
         .select("nodeId1", "nodeId2", "features_diff_sum")
     )
+
+
+def similarity_gds(
+    spark: SparkSession,
+    graph_name: str,
+    SIMILARITY_THRESHOLD: float = 0.95,
+) -> DataFrame:
+    create_graph(spark, graph_name)
+    return (
+        spark.read.format("org.neo4j.spark.DataSource")
+        .option("gds", "gds.nodeSimilarity.stream")
+        .option("gds.graphName", graph_name)
+        .option("gds.configuration.similarityCutoff", str(SIMILARITY_THRESHOLD))
+        .load()
+        .select(
+            col("node1").alias("nodeId1"),
+            col("node2").alias("nodeId2"),
+            col("similarity"),
+        )
+    )
